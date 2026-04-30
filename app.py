@@ -26,6 +26,16 @@ STATIC_DIR = ROOT / "static"
 
 app = FastAPI()
 
+# In-process per-PDF chat memory: file_id -> [{question, answer, citations}].
+# Volatile (lost on restart) — fine for v1; add disk persistence later if
+# desired by writing to pdfs/<stem>_history.json.
+CHATS: dict[str, list[dict]] = {}
+MAX_TURNS_KEPT = 20  # cap stored turns per file to keep prompts bounded
+
+
+def _safe_id(file_id: str) -> str:
+    return Path(file_id).name
+
 
 @app.get("/")
 async def index():
@@ -86,9 +96,23 @@ async def models():
     return {"choices": list(MODEL_CHOICES), "default": DEFAULT_MODEL}
 
 
+@app.get("/history/{file_id}")
+async def get_history(file_id: str):
+    """Return the stored chat for a PDF so the UI can rehydrate after a
+    page reload."""
+    return {"turns": CHATS.get(_safe_id(file_id), [])}
+
+
+@app.post("/clear/{file_id}")
+async def clear_history(file_id: str):
+    """Wipe stored chat for a PDF."""
+    CHATS.pop(_safe_id(file_id), None)
+    return {"ok": True}
+
+
 @app.post("/ask")
 async def ask(body: AskBody):
-    safe = Path(body.file_id).name
+    safe = _safe_id(body.file_id)
     pdf_path = PDF_DIR / safe
     if not pdf_path.exists():
         raise HTTPException(404)
@@ -97,13 +121,37 @@ async def ask(body: AskBody):
     if body.mode not in MODE_CHOICES:
         raise HTTPException(400, f"Unknown mode: {body.mode}")
 
+    history = list(CHATS.get(safe, []))
+
     async def stream():
+        final_answer = ""
+        final_citations: list = []
         try:
             async for kind, payload in run_agent(
-                pdf_path, body.question, model=body.model, mode=body.mode
+                pdf_path,
+                body.question,
+                model=body.model,
+                mode=body.mode,
+                history=history,
             ):
+                if kind == "done":
+                    final_answer = payload.get("answer") or ""
+                    final_citations = payload.get("citations") or []
                 yield f"data: {json.dumps({'type': kind, 'data': payload})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+            return
+
+        # Persist the turn only if the run produced an answer.
+        if final_answer.strip():
+            turns = CHATS.setdefault(safe, [])
+            turns.append(
+                {
+                    "question": body.question,
+                    "answer": final_answer,
+                    "citations": final_citations,
+                }
+            )
+            del turns[:-MAX_TURNS_KEPT]
 
     return StreamingResponse(stream(), media_type="text/event-stream")

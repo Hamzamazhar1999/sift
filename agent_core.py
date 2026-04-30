@@ -1,6 +1,7 @@
 """Shared agent logic for the CLI and the web app.
 """
 import json
+import re
 from pathlib import Path
 
 import pymupdf
@@ -27,7 +28,7 @@ QUESTION:          {question}
 MODE:              {mode}
 
 {mode_guidance}
-
+{conversation_history}
 Do this end-to-end without asking for confirmation:
 
 1. Read the ENTIRE pages text file ({pages_text_path}). It is split by page
@@ -72,6 +73,24 @@ Do this end-to-end without asking for confirmation:
 5. Verify both OUTPUT PDF and CITATIONS JSON exist.
 6. Output the final answer.
 
+SOURCE RESTRICTION — abstract is OFF-LIMITS (every mode):
+- The pages text file marks the abstract with literal sentinel lines:
+      [BEGIN ABSTRACT — DO NOT CITE FROM HERE]
+      <abstract paragraphs>
+      [END ABSTRACT]
+- Any verbatim quote in your `passages` list MUST come from outside that
+  region. Do not extract a passage whose words sit between those markers,
+  even if it perfectly answers the question.
+- The abstract exists for your context only. When a relevant claim appears
+  in it, locate the same claim in the body — introduction, methodology,
+  results, discussion, conclusion — and cite the body passage instead.
+  Authors restate abstract claims in the body almost without exception.
+- If you genuinely cannot locate the same claim outside the abstract, cite
+  the closest related body passage rather than reaching into the abstract.
+- If the markers are absent (rare — abstract not detectable), apply the
+  same rule by inspection: skip whatever block of text serves as the
+  paper's opening summary and cite the body version of any claim.
+
 FORMATTING:
 - The answer is rendered as Markdown. Use **bold** for key terms, bullet
   lists ("- item") when enumerating, and short headers ("## Heading") only
@@ -89,6 +108,19 @@ Work autonomously. Do not ask permission.
 
 
 MODE_GUIDANCE = {
+    "auto": """\
+MODE GUIDANCE — auto (adaptive, default):
+Let the question dictate the answer's shape. If asked for "examples," give
+a short list of examples. If asked "what is X," give the definition. If
+asked to "compare X and Y," give a comparison. If asked a yes/no question,
+lead with the answer. Don't impose a length — match the scope of what was
+asked. Use markdown lists or short headers when the answer is naturally
+enumerative or has distinct sections.
+
+Cite every distinct claim with "(p. N)". No upper limit on citations.
+Don't pad. Don't preface ("Based on the PDF…"). Don't summarize what you
+just said.
+""",
     "strict": """\
 MODE GUIDANCE — strict (extractive):
 Answer using ONLY what the PDF explicitly states. Do not add inference,
@@ -119,7 +151,82 @@ covering both explicit support and the passages that anchor inferences.
 
 
 MODE_CHOICES = tuple(MODE_GUIDANCE.keys())
-DEFAULT_MODE = "strict"
+DEFAULT_MODE = "auto"
+MAX_HISTORY_TURNS_IN_PROMPT = 10
+
+
+def _format_history(history) -> str:
+    """Render prior turns as a context block. Empty if no history."""
+    if not history:
+        return ""
+    recent = history[-MAX_HISTORY_TURNS_IN_PROMPT:]
+    parts = []
+    for i, turn in enumerate(recent, 1):
+        q = (turn.get("question") or "").strip()
+        a = (turn.get("answer") or "").strip()
+        parts.append(f"[Turn {i}]\nUser: {q}\nAssistant: {a}")
+    body = "\n\n".join(parts)
+    return (
+        "\nPRIOR CONVERSATION (for context — the user may refer back to it):\n\n"
+        + body
+        + "\n"
+    )
+
+
+def _join_chunk(buf: str, chunk: str) -> str:
+    """Append `chunk` to `buf`, inserting a space when streamed model chunks
+    meet at a word boundary without whitespace (mirrors the JS heuristic so
+    stored answers read naturally)."""
+    if not buf or not chunk:
+        return buf + chunk
+    last, first = buf[-1], chunk[0]
+    if last.isspace() or first.isspace():
+        return buf + chunk
+    if first in '.,;:!?)]"\'':
+        return buf + chunk
+    return buf + " " + chunk
+
+
+_ABSTRACT_START = re.compile(r"^\s*(Abstract|ABSTRACT)\s*\.?\s*$", re.M)
+
+# Patterns that mark the end of the abstract. We stop at whichever appears
+# first — footnotes typically follow the abstract on the same page, before
+# the actual Introduction section appears further down (often on page 2).
+_ABSTRACT_END_PATTERNS = [
+    re.compile(r"^\s*[∗*†‡§]", re.M),                                    # footnote markers
+    re.compile(r"^(?:\s*\d+\.?\s+)?(?:Introduction|INTRODUCTION)\b", re.M),
+    re.compile(r"^\s*\d+(?:st|nd|rd|th)\s+", re.M),                       # "31st Conference…"
+    re.compile(r"^\s*arXiv:", re.M),
+    re.compile(r"^=== PAGE ", re.M),                                      # page boundary fallback
+]
+
+
+def _mark_abstract(text: str) -> str:
+    """Wrap the abstract section in BEGIN/END ABSTRACT markers so the agent
+    can be instructed to never extract verbatim quotes from inside them.
+    Returns the text unchanged if the abstract can't be located."""
+    m_start = _ABSTRACT_START.search(text)
+    if not m_start:
+        return text
+    body_start = m_start.end()
+    end_pos = None
+    for pat in _ABSTRACT_END_PATTERNS:
+        m = pat.search(text, pos=body_start)
+        if m and (end_pos is None or m.start() < end_pos):
+            end_pos = m.start()
+    if end_pos is None:
+        return text
+    abstract = text[body_start:end_pos].strip()
+    # Sanity check — abstracts are typically 500–3000 chars.
+    if len(abstract) < 100 or len(abstract) > 6000:
+        return text
+    return (
+        text[:body_start]
+        + "\n\n[BEGIN ABSTRACT — DO NOT CITE FROM HERE]\n"
+        + abstract
+        + "\n[END ABSTRACT]\n\n"
+        + text[end_pos:]
+    )
 
 
 def extract_pages(pdf_path: Path) -> tuple[Path, str, int]:
@@ -130,7 +237,7 @@ def extract_pages(pdf_path: Path) -> tuple[Path, str, int]:
     parts = [f"=== PAGE {i+1} ===\n{page.get_text()}" for i, page in enumerate(doc)]
     page_count = len(parts)
     doc.close()
-    text = "\n\n".join(parts)
+    text = _mark_abstract("\n\n".join(parts))
     out.write_text(text)
     return out, text, page_count
 
@@ -159,8 +266,15 @@ async def run_agent(
     question: str,
     model: str = DEFAULT_MODEL,
     mode: str = DEFAULT_MODE,
+    history: list | None = None,
 ):
-    """Async generator yielding ('text', str) | ('tool', str) | ('done', dict)."""
+    """Async generator yielding ('text', str) | ('tool', str) | ('done', dict).
+
+    `history` is a list of {"question", "answer"} dicts from prior turns on
+    this same PDF. It is rendered into a context block in the prompt so the
+    model can answer follow-ups like "what about table 3?" or "remember what
+    I asked first?".
+    """
     pdf_path = pdf_path.resolve()
     if not pdf_path.exists():
         raise FileNotFoundError(pdf_path)
@@ -192,6 +306,7 @@ async def run_agent(
         mode=mode,
         mode_guidance=MODE_GUIDANCE[mode],
         highlight_lib_dir=str(Path(__file__).parent.resolve()),
+        conversation_history=_format_history(history),
     )
 
     options = ClaudeAgentOptions(
@@ -202,16 +317,18 @@ async def run_agent(
         model=None if model == "inherit" else model,
     )
 
+    # Mirror the client's "text resets on tool" logic so we can capture the
+    # final post-last-tool text and return it on the done event for storage.
+    final_answer = ""
+
     async for message in query(prompt=prompt, options=options):
         if isinstance(message, AssistantMessage):
-            # Emit every text/tool block. The client treats text as ephemeral
-            # until no more tools fire — any text shown before a tool event
-            # gets discarded and the "thinking" indicator returns. Only the
-            # text after the final tool sticks as the answer.
             for block in message.content:
                 if isinstance(block, TextBlock):
+                    final_answer = _join_chunk(final_answer, block.text)
                     yield ("text", block.text)
                 elif isinstance(block, ToolUseBlock):
+                    final_answer = ""  # was thinking-out-loud
                     yield ("tool", _tool_label(block))
         elif isinstance(message, ResultMessage):
             citations = []
@@ -226,5 +343,6 @@ async def run_agent(
                     "cost_usd": getattr(message, "total_cost_usd", None),
                     "highlighted_pdf": str(output_path) if output_path.exists() else None,
                     "citations": citations,
+                    "answer": final_answer,
                 },
             )

@@ -16,6 +16,9 @@
   #right { width: 460px; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
   #right h1 { font-size: 16px; margin: 0 0 4px; }
   #upload-row { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  #upload-row #clear { font-size: 11.5px; padding: 4px 8px; border: 1px solid var(--border); background: white; border-radius: 4px; cursor: pointer; color: var(--muted); }
+  #upload-row #clear:hover:not(:disabled) { background: #fff7d6; color: #8a6d2c; }
+  #upload-row #clear:disabled { opacity: 0.4; cursor: default; }
   #log { flex: 1; overflow-y: auto; background: var(--bg); padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13.5px; line-height: 1.45; }
   #log .turn { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
   #log .turn:last-child { border-bottom: 0; }
@@ -29,8 +32,9 @@
   #log .answer code { background: #f0eeea; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
   #log .answer strong { font-weight: 600; }
   #log .answer a { color: var(--accent); }
-  #log .pageref { color: var(--accent); cursor: pointer; font-weight: 500; padding: 0 1px; border-radius: 3px; }
-  #log .pageref:hover { background: #ffe8b8; text-decoration: underline; }
+  #log .pageref { color: #333; cursor: pointer; font-weight: 500; padding: 1px 5px; border-radius: 3px; background: #f0e9d3; transition: filter 0.1s; }
+  #log .pageref:hover { filter: brightness(0.92); text-decoration: underline; }
+  #log .pageref.unmatched { color: var(--accent); background: transparent; padding: 0 1px; }
   #log .tool { color: var(--muted); font-style: italic; font-size: 12px; }
   #log .thinking { color: var(--muted); font-size: 13px; font-style: italic; display: flex; align-items: baseline; gap: 2px; }
   #log .thinking .word { transition: opacity 0.25s ease; }
@@ -51,7 +55,7 @@
   #log .thoughts .entry.text { color: #555; }
   #log .citations { margin-top: 8px; }
   #log .citations h4 { margin: 4px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .citation { display: block; background: #fff7d6; border: 1px solid #f0d97a; padding: 6px 8px; margin: 4px 0; border-radius: 3px; cursor: pointer; font-size: 12.5px; }
+  .citation { display: block; background: #fff7d6; border: 1px solid #e5e5e5; border-left: 4px solid #f0d97a; padding: 6px 8px; margin: 4px 0; border-radius: 3px; cursor: pointer; font-size: 12.5px; }
   .citation:hover { background: #fff0a8; }
   .citation .pg { font-weight: 600; color: var(--accent); margin-right: 6px; }
   .citation.missing { background: #f4f4f4; border-color: #ddd; color: var(--muted); cursor: default; }
@@ -76,9 +80,10 @@
   <h1>sift</h1>
   <div id="upload-row">
     <input type="file" id="upload" accept="application/pdf">
+    <button id="clear" title="Clear chat history for this PDF" disabled>↩ clear</button>
   </div>
   <div id="log"><div class="placeholder">Upload or pick a PDF, then ask a question.</div></div>
-  <textarea id="q" placeholder="Ask a question about the PDF…"></textarea>
+  <textarea id="q" placeholder="Ask a question about the PDF… (Enter to send, Shift+Enter for newline)"></textarea>
   <div id="ask-row">
     <label style="font-size:12px;color:var(--muted)">model
       <select id="model"></select>
@@ -100,6 +105,7 @@ const q = document.getElementById('q');
 const log = document.getElementById('log');
 const modelSelect = document.getElementById('model');
 const modeSelect = document.getElementById('mode');
+const clearBtn = document.getElementById('clear');
 
 function populate(sel, cfg, storageKey) {
   sel.innerHTML = '';
@@ -169,6 +175,33 @@ function linkifyPageRefs(root) {
     }
     if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
     node.parentNode.replaceChild(frag, node);
+  }
+}
+
+// Color each .pageref span under `root` with its matching citation's color.
+// Mapping: walk pagerefs in document order, build a per-page queue of
+// citations, and pop the next citation off the queue whose page matches the
+// pageref's first page. Pagerefs that don't find a match get marked
+// .unmatched (rendered in the plain accent style).
+function colorPageRefs(root, citations) {
+  const queues = {};
+  (citations || []).forEach(c => {
+    if (c.found === false || !c.color) return;
+    (queues[c.page] = queues[c.page] || []).push(c);
+  });
+  const refs = root.querySelectorAll('.pageref');
+  for (const ref of refs) {
+    const pages = JSON.parse(ref.dataset.pages || '[]');
+    const p = pages[0];
+    const queue = queues[p];
+    if (queue && queue.length) {
+      const c = queue.shift();
+      ref.style.backgroundColor = c.color;
+      ref.classList.remove('unmatched');
+    } else {
+      ref.classList.add('unmatched');
+      ref.style.backgroundColor = '';
+    }
   }
 }
 
@@ -247,7 +280,71 @@ function loadFile(name) {
   showHighlighted.checked = false;
   reloadFrame();
   send.disabled = !fileId;
+  // Reset chat panel and rehydrate history for this PDF
+  log.innerHTML = '<div class="placeholder">Loading…</div>';
+  loadHistory();
 }
+
+function renderPastTurn(t) {
+  const turn = turnEl();
+  turn.appendChild(el('div', 'q', 'Q: ' + t.question));
+  const answer = el('div', 'answer');
+  answer.innerHTML = renderMarkdown(t.answer || '');
+  linkifyPageRefs(answer);
+  turn.appendChild(answer);
+  const cites = t.citations || [];
+  if (cites.length) {
+    const box = el('div', 'citations');
+    box.appendChild(el('h4', null, 'Citations'));
+    cites.forEach(c => buildCitationChip(c, box));
+    turn.appendChild(box);
+  }
+  colorPageRefs(answer, cites);
+  log.appendChild(turn);
+}
+
+function buildCitationChip(c, box) {
+  const cite = el('div', 'citation' + (c.found === false ? ' missing' : ''));
+  if (c.color) cite.style.borderLeftColor = c.color;
+  cite.appendChild(el('span', 'pg', 'p.' + c.page));
+  cite.appendChild(document.createTextNode(c.quote));
+  if (c.found !== false) {
+    cite.addEventListener('click', () => {
+      showHighlighted.checked = true;
+      reloadFrame(c.page);
+    });
+  }
+  box.appendChild(cite);
+}
+
+async function loadHistory() {
+  if (!fileId) { clearBtn.disabled = true; return; }
+  let turns = [];
+  try {
+    const r = await fetch('/history/' + encodeURIComponent(fileId));
+    if (r.ok) turns = (await r.json()).turns || [];
+  } catch {}
+  if (!turns.length) {
+    log.innerHTML = '<div class="placeholder">Ask a question about this PDF.</div>';
+    clearBtn.disabled = true;
+    return;
+  }
+  log.innerHTML = '';
+  turns.forEach(renderPastTurn);
+  clearBtn.disabled = false;
+  // Past turns may have generated a highlighted PDF; check if it exists.
+  fetch('/pdf/' + encodeURIComponent(fileId) + '?highlighted=true', { method: 'HEAD' })
+    .then(r => { if (r.ok) hasHighlighted = true; })
+    .catch(() => {});
+}
+
+clearBtn.addEventListener('click', async () => {
+  if (!fileId) return;
+  if (!confirm('Clear chat history for this PDF?')) return;
+  await fetch('/clear/' + encodeURIComponent(fileId), { method: 'POST' });
+  log.innerHTML = '<div class="placeholder">Cleared. Ask a new question.</div>';
+  clearBtn.disabled = true;
+});
 
 upload.addEventListener('change', async () => {
   const f = upload.files[0];
@@ -428,6 +525,7 @@ send.addEventListener('click', async () => {
         showThinking();
       } else if (m.type === 'done') {
         stopThinking();
+        clearBtn.disabled = false;
         if (trail.length) {
           const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
           const steps = trail.filter(e => e.kind === 'tool').length;
@@ -460,19 +558,9 @@ send.addEventListener('click', async () => {
         if (cites.length) {
           const box = el('div', 'citations');
           box.appendChild(el('h4', null, 'Citations'));
-          cites.forEach(c => {
-            const cite = el('div', 'citation' + (c.found === false ? ' missing' : ''));
-            cite.appendChild(el('span', 'pg', 'p.' + c.page));
-            cite.appendChild(document.createTextNode(c.quote));
-            if (c.found !== false) {
-              cite.addEventListener('click', () => {
-                showHighlighted.checked = true;
-                reloadFrame(c.page);
-              });
-            }
-            box.appendChild(cite);
-          });
+          cites.forEach(c => buildCitationChip(c, box));
           turn.appendChild(box);
+          colorPageRefs(answer, cites);
         }
         if (m.data.cost_usd) {
           meta.textContent = `$${m.data.cost_usd.toFixed(4)}`;
@@ -488,7 +576,11 @@ send.addEventListener('click', async () => {
 });
 
 q.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send.click();
+  // Enter sends, Shift+Enter inserts a newline.
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (!send.disabled) send.click();
+  }
 });
 
 refreshList();

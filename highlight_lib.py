@@ -1,6 +1,7 @@
 """Robust PDF highlighting that survives multi-line wraps, hyphenation, and
 mild paraphrases.
 """
+import colorsys
 import difflib
 import json
 import re
@@ -63,6 +64,37 @@ def _join(picked):
     return " ".join(w[4] for w in picked)
 
 
+def _palette(n: int):
+    """Return n visually-distinct pastel colors as ((r,g,b)_0to1, "#rrggbb")
+    pairs. Uses golden-angle hue stepping so colors stay distinguishable as
+    n grows."""
+    phi = 0.6180339887498949
+    out = []
+    for i in range(max(n, 1)):
+        h = ((i * phi) + 0.13) % 1.0
+        r, g, b = colorsys.hls_to_rgb(h, 0.78, 0.85)
+        hex_str = f"#{int(round(r*255)):02x}{int(round(g*255)):02x}{int(round(b*255)):02x}"
+        out.append(((r, g, b), hex_str))
+    return out
+
+
+def _best_match_across_pages(doc, quote: str, prefer_page: int | None = None):
+    """Scan every page for `quote`, return (rects, matched, page_num) for
+    whichever yields the longest matching word run. The cited `prefer_page`
+    gets a small score boost so it wins ties — but a substantively longer
+    match on another page always wins, which is the whole point: the model
+    sometimes mis-cites the page number."""
+    best = None  # (rects, matched, page_num, score)
+    for j in range(len(doc)):
+        rects, matched = find_quote_rects(doc[j], quote)
+        if not rects:
+            continue
+        score = len(rects) + (0.5 if (j + 1) == prefer_page else 0.0)
+        if best is None or score > best[3]:
+            best = (rects, matched, j + 1, score)
+    return best
+
+
 def highlight_pdf(
     input_pdf: str,
     output_pdf: str,
@@ -71,28 +103,47 @@ def highlight_pdf(
 ):
     """passages: list of {"page": int (1-indexed), "quote": str}.
 
-    Writes the highlighted PDF to output_pdf and a citations JSON to
-    citations_path: [{"page": int, "quote": str, "found": bool}], where
-    "quote" is updated to the text actually highlighted in the PDF.
+    For each passage:
+      1. Try the cited page.
+      2. If nothing matches, scan every other page for the longest match —
+         this catches off-by-one or wrong-section page numbers without
+         dropping the citation.
+    Each citation gets a distinct pastel color used both on the PDF
+    highlight and exposed via citations.json["color"] for the UI to mirror,
+    so the same yellow/peach/etc. shade ties a chip to its highlight.
+
+    Citations JSON: [{"page", "quote", "found", "color"}]. "page" is the
+    page actually highlighted on (may differ from the input if fallback
+    found it elsewhere); "quote" is the text actually highlighted.
     """
     doc = pymupdf.open(input_pdf)
+    palette = _palette(len(passages))
     citations = []
-    for p in passages:
-        page_num = int(p["page"])
+    for i, p in enumerate(passages):
+        rgb, hex_color = palette[i]
         original = p["quote"]
-        if page_num < 1 or page_num > len(doc):
-            citations.append({"page": page_num, "quote": original, "found": False})
-            continue
-        page = doc[page_num - 1]
-        rects, matched = find_quote_rects(page, original)
-        if rects:
+        cited_page = int(p["page"])
+
+        best = _best_match_across_pages(doc, original, prefer_page=cited_page)
+        if best:
+            rects, matched, used_page, _ = best
+            page = doc[used_page - 1]
             for r in rects:
-                page.add_highlight_annot(r)
+                annot = page.add_highlight_annot(r)
+                annot.set_colors(stroke=rgb)
+                annot.update()
             citations.append(
-                {"page": page_num, "quote": matched or original, "found": True}
+                {
+                    "page": used_page,
+                    "quote": matched or original,
+                    "found": True,
+                    "color": hex_color,
+                }
             )
         else:
-            citations.append({"page": page_num, "quote": original, "found": False})
+            citations.append(
+                {"page": cited_page, "quote": original, "found": False}
+            )
     doc.save(output_pdf)
     doc.close()
     Path(citations_path).write_text(json.dumps(citations, indent=2))
