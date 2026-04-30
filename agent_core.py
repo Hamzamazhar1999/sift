@@ -336,7 +336,15 @@ async def run_agent(
             citations = []
             if citations_path.exists():
                 try:
-                    citations = json.loads(citations_path.read_text())
+                    # Force UTF-8: citations.json is written with raw
+                    # Unicode (ensure_ascii=False) so smart quotes / em-dashes
+                    # / ligatures stay human-readable. Without an explicit
+                    # encoding, Path.read_text falls back to cp1252 on
+                    # Windows and throws on any non-ASCII char — which
+                    # silently empties the citation list.
+                    citations = json.loads(
+                        citations_path.read_text(encoding="utf-8")
+                    )
                 except Exception:
                     citations = []
             yield (
