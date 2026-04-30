@@ -238,7 +238,9 @@ def extract_pages(pdf_path: Path) -> tuple[Path, str, int]:
     page_count = len(parts)
     doc.close()
     text = _mark_abstract("\n\n".join(parts))
-    out.write_text(text)
+    # Force UTF-8: PDF text contains ligatures (ﬁ ﬂ), em-dashes, smart
+    # quotes, etc. Windows' default cp1252 can't encode them.
+    out.write_text(text, encoding="utf-8")
     return out, text, page_count
 
 

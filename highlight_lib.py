@@ -146,5 +146,10 @@ def highlight_pdf(
             )
     doc.save(output_pdf)
     doc.close()
-    Path(citations_path).write_text(json.dumps(citations, indent=2))
+    # Force UTF-8: quotes can contain ligatures, smart quotes, etc.
+    # ensure_ascii=False keeps the JSON readable for humans inspecting it.
+    Path(citations_path).write_text(
+        json.dumps(citations, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     return citations
