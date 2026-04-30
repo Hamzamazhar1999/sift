@@ -28,21 +28,45 @@ piggybacks on your local [Claude Code][cc] session — no API keys to manage.
 
 ## Prerequisites
 
-- Python **3.10+**
+- **Python 3.10 or newer.** The Claude Agent SDK requires it. If
+  `pip install` reports `No matching distribution found for
+  claude-agent-sdk`, your Python is too old — check with
+  `python --version` and install a newer one
+  ([python.org](https://www.python.org/downloads/)).
 - [Claude Code CLI][cc] installed and signed in once interactively
   (`claude` from a terminal). The Agent SDK piggybacks on this auth — works
   with a Claude Pro/Max subscription or an API key configured via the CLI.
 
 ## Setup
 
+### macOS / Linux
+
 ```bash
-git clone <your-fork-url> sift
+git clone https://github.com/<you>/sift.git
 cd sift
 
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+If `python3` resolves to an older interpreter, run the venv step with the
+specific binary, e.g. `python3.12 -m venv venv`.
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/<you>/sift.git
+cd sift
+
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+If PowerShell blocks the activate script with an execution-policy error,
+run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+Use `venv\Scripts\activate.bat` from cmd.exe instead of PowerShell.
 
 ## Run
 
