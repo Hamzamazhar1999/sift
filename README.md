@@ -1,3 +1,5 @@
+<img src="static/icon.png">
+
 # sift
 
 Ask questions about a PDF, get answers with **clickable, page-anchored
