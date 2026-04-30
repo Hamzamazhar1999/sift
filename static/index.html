@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>sift</title>
+<style>
+  :root { --accent: #d97757; --border: #e5e5e5; --muted: #888; --bg: #fafafa; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, system-ui, sans-serif; }
+  body { display: flex; }
+  #left { flex: 1; min-width: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  #left-bar { padding: 6px 10px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; font-size: 13px; background: var(--bg); }
+  #left-bar select { flex: 1; padding: 4px; }
+  #pdf-frame { flex: 1; border: 0; width: 100%; background: #444; }
+  .placeholder { padding: 40px; color: var(--muted); text-align: center; }
+  #right { width: 460px; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
+  #right h1 { font-size: 16px; margin: 0 0 4px; }
+  #upload-row { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  #log { flex: 1; overflow-y: auto; background: var(--bg); padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13.5px; line-height: 1.45; }
+  #log .turn { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px dashed var(--border); }
+  #log .turn:last-child { border-bottom: 0; }
+  #log .q { font-weight: 600; margin-bottom: 6px; }
+  #log .answer { line-height: 1.5; }
+  #log .answer p { margin: 0 0 8px; }
+  #log .answer p:last-child { margin-bottom: 0; }
+  #log .answer ul, #log .answer ol { margin: 4px 0 8px; padding-left: 22px; }
+  #log .answer li { margin: 2px 0; }
+  #log .answer h1, #log .answer h2, #log .answer h3 { margin: 10px 0 4px; font-size: 14px; }
+  #log .answer code { background: #f0eeea; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+  #log .answer strong { font-weight: 600; }
+  #log .answer a { color: var(--accent); }
+  #log .pageref { color: var(--accent); cursor: pointer; font-weight: 500; padding: 0 1px; border-radius: 3px; }
+  #log .pageref:hover { background: #ffe8b8; text-decoration: underline; }
+  #log .tool { color: var(--muted); font-style: italic; font-size: 12px; }
+  #log .thinking { color: var(--muted); font-size: 13px; font-style: italic; display: flex; align-items: baseline; gap: 2px; }
+  #log .thinking .word { transition: opacity 0.25s ease; }
+  #log .thinking .dots::after { content: '…'; animation: dots 1.4s steps(4, end) infinite; display: inline-block; min-width: 1em; }
+  @keyframes dots { 0%,24% { content: '.'; } 25%,49% { content: '..'; } 50%,100% { content: '…'; } }
+  #log .meta { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+  #log .stats { color: var(--muted); font-size: 11.5px; margin-bottom: 4px; }
+  #log .thoughts { font-size: 12px; color: var(--muted); margin: 4px 0 8px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+  #log .thoughts summary { cursor: pointer; user-select: none; padding: 6px 8px; list-style: none; display: flex; gap: 6px; align-items: center; }
+  #log .thoughts summary::-webkit-details-marker { display: none; }
+  #log .thoughts summary::before { content: '▸'; transition: transform 0.15s ease; display: inline-block; }
+  #log .thoughts[open] summary::before { transform: rotate(90deg); }
+  #log .thoughts summary:hover { color: #444; background: #f7f7f7; }
+  #log .thoughts .body { padding: 0 8px 6px 22px; border-top: 1px solid var(--border); }
+  #log .thoughts .entry { padding: 4px 0; white-space: pre-wrap; line-height: 1.4; }
+  #log .thoughts .entry + .entry { border-top: 1px dashed var(--border); }
+  #log .thoughts .entry.tool { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #888; }
+  #log .thoughts .entry.text { color: #555; }
+  #log .citations { margin-top: 8px; }
+  #log .citations h4 { margin: 4px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .citation { display: block; background: #fff7d6; border: 1px solid #f0d97a; padding: 6px 8px; margin: 4px 0; border-radius: 3px; cursor: pointer; font-size: 12.5px; }
+  .citation:hover { background: #fff0a8; }
+  .citation .pg { font-weight: 600; color: var(--accent); margin-right: 6px; }
+  .citation.missing { background: #f4f4f4; border-color: #ddd; color: var(--muted); cursor: default; }
+  #q { width: 100%; padding: 8px; resize: vertical; min-height: 70px; font: inherit; border: 1px solid var(--border); border-radius: 4px; }
+  #ask-row { display: flex; gap: 8px; align-items: center; }
+  #ask-row label { display: flex; gap: 4px; align-items: center; }
+  #ask-row #model { font-size: 12px; padding: 3px; }
+  #send { flex: 1; padding: 9px; background: var(--accent); color: white; border: 0; border-radius: 4px; cursor: pointer; font-weight: 600; }
+  #send:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+<div id="left">
+  <div id="left-bar">
+    <select id="pdf-select"><option value="">(no PDF loaded)</option></select>
+    <label style="font-size:12px;color:var(--muted)"><input type="checkbox" id="show-highlighted"> highlighted</label>
+  </div>
+  <iframe id="pdf-frame" src="about:blank"></iframe>
+</div>
+
+<div id="right">
+  <h1>sift</h1>
+  <div id="upload-row">
+    <input type="file" id="upload" accept="application/pdf">
+  </div>
+  <div id="log"><div class="placeholder">Upload or pick a PDF, then ask a question.</div></div>
+  <textarea id="q" placeholder="Ask a question about the PDF…"></textarea>
+  <div id="ask-row">
+    <label style="font-size:12px;color:var(--muted)">model
+      <select id="model"></select>
+    </label>
+    <label style="font-size:12px;color:var(--muted)">mode
+      <select id="mode"></select>
+    </label>
+    <button id="send" disabled>Ask</button>
+  </div>
+</div>
+
+<script>
+const upload = document.getElementById('upload');
+const select = document.getElementById('pdf-select');
+const showHighlighted = document.getElementById('show-highlighted');
+const pdfFrame = document.getElementById('pdf-frame');
+const send = document.getElementById('send');
+const q = document.getElementById('q');
+const log = document.getElementById('log');
+const modelSelect = document.getElementById('model');
+const modeSelect = document.getElementById('mode');
+
+function populate(sel, cfg, storageKey) {
+  sel.innerHTML = '';
+  for (const c of cfg.choices) {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    if (c === cfg.default) o.selected = true;
+    sel.appendChild(o);
+  }
+  const saved = localStorage.getItem(storageKey);
+  if (saved && cfg.choices.includes(saved)) sel.value = saved;
+  sel.addEventListener('change', () => localStorage.setItem(storageKey, sel.value));
+}
+
+(async () => {
+  const fallback = {
+    models: { choices: ['haiku', 'sonnet', 'opus', 'inherit'], default: 'haiku' },
+    modes:  { choices: ['strict', 'brainstorm'],               default: 'strict' },
+  };
+  let j = fallback;
+  try {
+    const r = await fetch('/config');
+    if (r.ok) {
+      const data = await r.json();
+      if (data && data.models && data.modes) j = data;
+    }
+  } catch (_) { /* fall through to defaults */ }
+  populate(modelSelect, j.models, 'sift.model');
+  populate(modeSelect, j.modes, 'sift.mode');
+})();
+
+// --- minimal markdown renderer (bold, italic, code, lists, headings, links) ---
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function inlineMd(s) {
+  s = escapeHtml(s);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?;:]|$)/g, '$1<em>$2</em>');
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+// Walk text nodes under `root` and turn "(p. N)" / "(pp. N, M)" into clickable
+// .pageref spans. dataset.pages is a JSON array of page numbers.
+function linkifyPageRefs(root) {
+  const re = /\((pp?\.?)\s*([\d][\d,\s–—\-]*)\)/g;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  for (let n; (n = walker.nextNode()); ) {
+    if (n.parentNode && n.parentNode.classList && n.parentNode.classList.contains('pageref')) continue;
+    if (re.test(n.nodeValue)) { re.lastIndex = 0; nodes.push(n); }
+  }
+  for (const node of nodes) {
+    const s = node.nodeValue;
+    const frag = document.createDocumentFragment();
+    let last = 0; let m;
+    while ((m = re.exec(s))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+      const span = document.createElement('span');
+      span.className = 'pageref';
+      span.textContent = m[0];
+      const pages = m[2].split(/[,\s–—\-]+/).filter(Boolean).map(p => parseInt(p, 10)).filter(Number.isFinite);
+      span.dataset.pages = JSON.stringify(pages);
+      frag.appendChild(span);
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+function renderMarkdown(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    let m;
+    if ((m = line.match(/^(#{1,6})\s+(.+)$/))) {
+      const h = Math.min(6, m[1].length + 1);
+      out.push(`<h${h}>${inlineMd(m[2])}</h${h}>`);
+      i++;
+    } else if (line.match(/^\s*[-*]\s+/)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\s*[-*]\s+/)) {
+        items.push(`<li>${inlineMd(lines[i].replace(/^\s*[-*]\s+/, ''))}</li>`);
+        i++;
+      }
+      out.push(`<ul>${items.join('')}</ul>`);
+    } else if (line.match(/^\s*\d+\.\s+/)) {
+      const items = [];
+      while (i < lines.length && lines[i].match(/^\s*\d+\.\s+/)) {
+        items.push(`<li>${inlineMd(lines[i].replace(/^\s*\d+\.\s+/, ''))}</li>`);
+        i++;
+      }
+      out.push(`<ol>${items.join('')}</ol>`);
+    } else if (line.trim() === '') {
+      i++;
+    } else {
+      const para = [];
+      while (i < lines.length && lines[i].trim() !== '' && !lines[i].match(/^\s*([-*]|\d+\.)\s+|^#{1,6}\s+/)) {
+        para.push(lines[i]);
+        i++;
+      }
+      out.push(`<p>${inlineMd(para.join(' '))}</p>`);
+    }
+  }
+  return out.join('');
+}
+
+let fileId = null;
+let hasHighlighted = false;
+
+function pdfUrl(page) {
+  if (!fileId) return 'about:blank';
+  const params = new URLSearchParams();
+  if (showHighlighted.checked && hasHighlighted) params.set('highlighted', 'true');
+  // bust iframe cache so re-running re-renders the new highlighted file
+  params.set('t', Date.now());
+  let u = '/pdf/' + encodeURIComponent(fileId) + '?' + params.toString();
+  if (page) u += '#page=' + page;
+  return u;
+}
+
+function reloadFrame(page) {
+  pdfFrame.src = pdfUrl(page);
+}
+
+async function refreshList(selected) {
+  const r = await fetch('/pdfs');
+  const j = await r.json();
+  select.innerHTML = '<option value="">(pick a PDF)</option>';
+  for (const f of j.files) {
+    const o = document.createElement('option');
+    o.value = f; o.textContent = f;
+    if (f === selected) o.selected = true;
+    select.appendChild(o);
+  }
+}
+
+function loadFile(name) {
+  fileId = name;
+  hasHighlighted = false;
+  showHighlighted.checked = false;
+  reloadFrame();
+  send.disabled = !fileId;
+}
+
+upload.addEventListener('change', async () => {
+  const f = upload.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/upload', { method: 'POST', body: fd });
+  const j = await r.json();
+  await refreshList(j.file_id);
+  loadFile(j.file_id);
+});
+
+select.addEventListener('change', () => {
+  if (select.value) loadFile(select.value);
+});
+
+showHighlighted.addEventListener('change', () => reloadFrame());
+
+log.addEventListener('click', e => {
+  const ref = e.target.closest('.pageref');
+  if (!ref || !fileId) return;
+  const pages = JSON.parse(ref.dataset.pages || '[]');
+  if (!pages.length) return;
+  showHighlighted.checked = true;
+  reloadFrame(pages[0]);
+});
+
+// Generic Claude-style activity verbs. Never task-specific — we don't expose
+// what the agent is actually doing.
+const THINKING_WORDS = [
+  'Pondering', 'Brewing', 'Cooking', 'Noodling', 'Hatching', 'Marinating',
+  'Spelunking', 'Mulling', 'Whisking', 'Sleuthing', 'Combing', 'Reasoning',
+  'Untangling', 'Distilling', 'Synthesizing', 'Excavating', 'Unraveling',
+  'Considering', 'Crunching', 'Percolating', 'Ruminating', 'Cogitating',
+  'Deliberating', 'Scheming', 'Puzzling', 'Tinkering', 'Foraging', 'Divining',
+];
+
+function pickThinkingWord(prev) {
+  let w;
+  do { w = THINKING_WORDS[Math.floor(Math.random() * THINKING_WORDS.length)]; }
+  while (w === prev);
+  return w;
+}
+
+function makeThinking() {
+  const div = el('div', 'thinking');
+  const word = el('span', 'word', pickThinkingWord());
+  const dots = el('span', 'dots');
+  div.appendChild(word);
+  div.appendChild(dots);
+  div._tick = setInterval(() => {
+    word.style.opacity = '0';
+    setTimeout(() => {
+      word.textContent = pickThinkingWord(word.textContent);
+      word.style.opacity = '1';
+    }, 250);
+  }, 2200);
+  div._stop = () => clearInterval(div._tick);
+  return div;
+}
+
+function turnEl() {
+  const el = document.createElement('div');
+  el.className = 'turn';
+  return el;
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+send.addEventListener('click', async () => {
+  if (!fileId || !q.value.trim()) return;
+  send.disabled = true;
+  const question = q.value;
+  q.value = '';
+
+  // clear placeholder on first turn
+  const placeholder = log.querySelector('.placeholder');
+  if (placeholder) log.innerHTML = '';
+
+  const turn = turnEl();
+  turn.appendChild(el('div', 'q', 'Q: ' + question));
+  const stats = el('div', 'stats', '');
+  turn.appendChild(stats);
+  const answer = el('div', 'answer', '');
+  answer.style.display = 'none';
+  turn.appendChild(answer);
+  const meta = el('div', 'meta', '');
+  turn.appendChild(meta);
+  log.appendChild(turn);
+  log.scrollTop = log.scrollHeight;
+
+  const startMs = Date.now();
+  const trail = [];  // [{kind: 'text'|'tool', content: string}]
+
+  let answerRaw = '';
+  let thinking = null;
+  function showThinking() {
+    if (thinking && thinking.isConnected) return;
+    if (thinking && thinking._stop) thinking._stop();
+    thinking = makeThinking();
+    turn.insertBefore(thinking, answer);
+    answer.style.display = 'none';
+    answer.innerHTML = '';
+    answerRaw = '';
+  }
+  function stopThinking() {
+    if (thinking) {
+      if (thinking._stop) thinking._stop();
+      thinking.remove();
+      thinking = null;
+    }
+  }
+  showThinking();
+
+  function needsSpace(prev, chunk) {
+    if (!prev || !chunk) return false;
+    const last = prev.slice(-1);
+    const first = chunk[0];
+    if (/\s/.test(last) || /\s/.test(first)) return false;
+    if (/[.,;:!?)\]'"]/.test(first)) return false;
+    return true;
+  }
+
+  let r;
+  try {
+    r = await fetch('/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId, question, model: modelSelect.value, mode: modeSelect.value }),
+    });
+  } catch (e) {
+    stopThinking();
+    meta.textContent = 'request failed: ' + e;
+    send.disabled = false;
+    return;
+  }
+
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const events = buf.split('\n\n');
+    buf = events.pop();
+    for (const evt of events) {
+      const line = evt.replace(/^data: /, '').trim();
+      if (!line) continue;
+      let m;
+      try { m = JSON.parse(line); } catch { continue; }
+      if (m.type === 'text') {
+        if (answer.style.display === 'none') {
+          stopThinking();
+          answer.style.display = '';
+        }
+        let chunk = m.data;
+        if (needsSpace(answerRaw, chunk)) chunk = ' ' + chunk;
+        answerRaw += chunk;
+        answer.innerHTML = renderMarkdown(answerRaw);
+        linkifyPageRefs(answer);
+      } else if (m.type === 'stats') {
+        const k = (m.data.char_count / 1000).toFixed(1);
+        stats.textContent = `Loaded ${m.data.page_count} pages · ${k}k chars`;
+      } else if (m.type === 'tool') {
+        // The currently-visible text was thinking-out-loud — preserve it in
+        // the trail, then reset the visible answer back to the indicator.
+        // Only post-last-tool text sticks as the real answer.
+        if (answerRaw.trim()) {
+          trail.push({ kind: 'text', content: answerRaw.trim() });
+        }
+        trail.push({ kind: 'tool', content: m.data });
+        showThinking();
+      } else if (m.type === 'done') {
+        stopThinking();
+        if (trail.length) {
+          const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+          const steps = trail.filter(e => e.kind === 'tool').length;
+          const details = document.createElement('details');
+          details.className = 'thoughts';
+          const summary = document.createElement('summary');
+          summary.textContent = `Thought for ${elapsed}s · ${steps} step${steps === 1 ? '' : 's'}`;
+          details.appendChild(summary);
+          const body = el('div', 'body');
+          for (const e of trail) {
+            const div = document.createElement('div');
+            div.className = 'entry ' + e.kind;
+            if (e.kind === 'text') {
+              div.innerHTML = renderMarkdown(e.content);
+              linkifyPageRefs(div);
+            } else {
+              div.textContent = e.content;
+            }
+            body.appendChild(div);
+          }
+          details.appendChild(body);
+          turn.insertBefore(details, answer);
+        }
+        if (m.data.highlighted_pdf) {
+          hasHighlighted = true;
+          showHighlighted.checked = true;
+          reloadFrame();
+        }
+        const cites = m.data.citations || [];
+        if (cites.length) {
+          const box = el('div', 'citations');
+          box.appendChild(el('h4', null, 'Citations'));
+          cites.forEach(c => {
+            const cite = el('div', 'citation' + (c.found === false ? ' missing' : ''));
+            cite.appendChild(el('span', 'pg', 'p.' + c.page));
+            cite.appendChild(document.createTextNode(c.quote));
+            if (c.found !== false) {
+              cite.addEventListener('click', () => {
+                showHighlighted.checked = true;
+                reloadFrame(c.page);
+              });
+            }
+            box.appendChild(cite);
+          });
+          turn.appendChild(box);
+        }
+        if (m.data.cost_usd) {
+          meta.textContent = `$${m.data.cost_usd.toFixed(4)}`;
+        }
+      } else if (m.type === 'error') {
+        stopThinking();
+        meta.textContent = 'ERROR: ' + m.data;
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+  send.disabled = false;
+});
+
+q.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send.click();
+});
+
+refreshList();
+</script>
+</body>
+</html>
