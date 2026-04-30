@@ -1,4 +1,4 @@
-<img src="static/icon.png">
+<img src="static/icon.png" width="120">
 
 # sift
 
