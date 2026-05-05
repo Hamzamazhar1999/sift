@@ -348,30 +348,40 @@ function linkifyPageRefs(root) {
 // pageref's first page. Pagerefs that don't find a match get marked
 // .unmatched (rendered in the plain accent style).
 function colorPageRefs(root, citations) {
-  // Group citations by page, in original order.
-  const byPage = {};
+  // Group citations by the page the MODEL CLAIMED inline ("(p. N)" in the
+  // answer text), not the page where highlight_lib actually found it. The
+  // two can differ: when the model gives a wrong page number, the page
+  // fallback in highlight_lib relocates the highlight to the real page,
+  // so the chip's `page` is corrected — but the inline (p. N) the user
+  // sees still uses the model's claimed number. Bucketing by claimed page
+  // keeps the lookup working; we then rewrite each matched pill to show
+  // and link to the actual page so the click lands on the highlight.
+  const byClaimed = {};
   (citations || []).forEach(c => {
     if (c.found === false || !c.color) return;
-    (byPage[c.page] = byPage[c.page] || []).push(c);
+    const claimed = c.original_page != null ? c.original_page : c.page;
+    (byClaimed[claimed] = byClaimed[claimed] || []).push(c);
   });
-  // Walk pagerefs in document order; for each page keep a per-page index
-  // and CYCLE through that page's citations rather than draining the queue.
-  // Tables tend to emit two (p. N) pills per row (body claim + citation
-  // column) for one citation chip — strict pairing exhausts and the rest
-  // fall back to orange. Cycling keeps every pill in the same color family
-  // as its chip even when there are more references than chips.
+  // Cycle within each bucket: tables emit ~2 pills per chip (body + cite
+  // column), so strict pairing exhausts.
   const idx = {};
   const refs = root.querySelectorAll('.pageref');
   for (const ref of refs) {
     const pages = JSON.parse(ref.dataset.pages || '[]');
-    const p = pages[0];
-    const list = byPage[p];
+    const claimed = pages[0];
+    const list = byClaimed[claimed];
     if (list && list.length) {
-      const i = idx[p] || 0;
+      const i = idx[claimed] || 0;
       const c = list[i % list.length];
-      idx[p] = i + 1;
+      idx[claimed] = i + 1;
       ref.style.backgroundColor = c.color;
       ref.classList.remove('unmatched');
+      // If the citation got relocated, rewrite the pill so display and
+      // click target match where the highlight actually lives.
+      if (c.page !== claimed) {
+        ref.textContent = '(p. ' + c.page + ')';
+        ref.dataset.pages = JSON.stringify([c.page]);
+      }
     } else {
       ref.classList.add('unmatched');
       ref.style.backgroundColor = '';

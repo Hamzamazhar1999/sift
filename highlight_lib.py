@@ -135,6 +135,7 @@ def highlight_pdf(
             citations.append(
                 {
                     "page": used_page,
+                    "original_page": cited_page,  # what the model claimed
                     "quote": matched or original,
                     "found": True,
                     "color": hex_color,
@@ -142,7 +143,12 @@ def highlight_pdf(
             )
         else:
             citations.append(
-                {"page": cited_page, "quote": original, "found": False}
+                {
+                    "page": cited_page,
+                    "original_page": cited_page,
+                    "quote": original,
+                    "found": False,
+                }
             )
     doc.save(output_pdf)
     doc.close()
