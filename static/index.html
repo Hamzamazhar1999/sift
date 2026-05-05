@@ -79,7 +79,13 @@
   .placeholder { padding: 40px; color: var(--muted); text-align: center; font-size: 13px; }
 
   /* Right pane (chat) */
-  #right { width: 470px; display: flex; flex-direction: column; padding: 14px; gap: 10px; background: var(--pane-bg); }
+  #right { width: 470px; flex-shrink: 0; display: flex; flex-direction: column; padding: 14px; gap: 10px; background: var(--pane-bg); min-width: 320px; }
+
+  /* Drag handle between panes */
+  #resizer { width: 5px; cursor: col-resize; background: var(--border); flex-shrink: 0; transition: background 0.12s; }
+  #resizer:hover, #resizer.active { background: var(--accent); }
+  body.resizing { cursor: col-resize; user-select: none; }
+  body.resizing iframe { pointer-events: none; }  /* keep the iframe from eating mousemove */
 
   /* Brand header */
   #brand { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border-soft); margin-bottom: 2px; }
@@ -177,6 +183,8 @@
   <iframe id="pdf-frame" src="about:blank"></iframe>
 </div>
 
+<div id="resizer" title="Drag to resize"></div>
+
 <div id="right">
   <header id="brand">
     <img src="/static/icon.png" alt="">
@@ -226,6 +234,42 @@ themeToggle.addEventListener('click', () => {
   applyTheme(next);
   localStorage.setItem('sift.theme', next);
 });
+
+// --- right-pane resizer ---
+(function () {
+  const resizer = document.getElementById('resizer');
+  const right = document.getElementById('right');
+  const MIN_RIGHT = 320;
+  const MIN_LEFT = 320;
+  const saved = parseInt(localStorage.getItem('sift.right-width') || '0', 10);
+  if (saved >= MIN_RIGHT) right.style.width = saved + 'px';
+
+  let dragging = false;
+  resizer.addEventListener('mousedown', e => {
+    dragging = true;
+    resizer.classList.add('active');
+    document.body.classList.add('resizing');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const w = Math.max(MIN_RIGHT, Math.min(window.innerWidth - MIN_LEFT, window.innerWidth - e.clientX));
+    right.style.width = w + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    resizer.classList.remove('active');
+    document.body.classList.remove('resizing');
+    localStorage.setItem('sift.right-width', parseInt(right.style.width, 10));
+  });
+  // Re-clamp on window resize so the right pane never exceeds the viewport
+  window.addEventListener('resize', () => {
+    const cur = parseInt(right.style.width, 10) || right.offsetWidth;
+    const max = window.innerWidth - MIN_LEFT;
+    if (cur > max) right.style.width = Math.max(MIN_RIGHT, max) + 'px';
+  });
+})();
 
 function populate(sel, cfg, storageKey) {
   sel.innerHTML = '';
@@ -304,18 +348,28 @@ function linkifyPageRefs(root) {
 // pageref's first page. Pagerefs that don't find a match get marked
 // .unmatched (rendered in the plain accent style).
 function colorPageRefs(root, citations) {
-  const queues = {};
+  // Group citations by page, in original order.
+  const byPage = {};
   (citations || []).forEach(c => {
     if (c.found === false || !c.color) return;
-    (queues[c.page] = queues[c.page] || []).push(c);
+    (byPage[c.page] = byPage[c.page] || []).push(c);
   });
+  // Walk pagerefs in document order; for each page keep a per-page index
+  // and CYCLE through that page's citations rather than draining the queue.
+  // Tables tend to emit two (p. N) pills per row (body claim + citation
+  // column) for one citation chip — strict pairing exhausts and the rest
+  // fall back to orange. Cycling keeps every pill in the same color family
+  // as its chip even when there are more references than chips.
+  const idx = {};
   const refs = root.querySelectorAll('.pageref');
   for (const ref of refs) {
     const pages = JSON.parse(ref.dataset.pages || '[]');
     const p = pages[0];
-    const queue = queues[p];
-    if (queue && queue.length) {
-      const c = queue.shift();
+    const list = byPage[p];
+    if (list && list.length) {
+      const i = idx[p] || 0;
+      const c = list[i % list.length];
+      idx[p] = i + 1;
       ref.style.backgroundColor = c.color;
       ref.classList.remove('unmatched');
     } else {
