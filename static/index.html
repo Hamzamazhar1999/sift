@@ -348,39 +348,51 @@ function linkifyPageRefs(root) {
 // pageref's first page. Pagerefs that don't find a match get marked
 // .unmatched (rendered in the plain accent style).
 function colorPageRefs(root, citations) {
-  // Group citations by the page the MODEL CLAIMED inline ("(p. N)" in the
-  // answer text), not the page where highlight_lib actually found it. The
-  // two can differ: when the model gives a wrong page number, the page
-  // fallback in highlight_lib relocates the highlight to the real page,
-  // so the chip's `page` is corrected — but the inline (p. N) the user
-  // sees still uses the model's claimed number. Bucketing by claimed page
-  // keeps the lookup working; we then rewrite each matched pill to show
-  // and link to the actual page so the click lands on the highlight.
+  // Two indexes: by the page the MODEL CLAIMED in passages (original_page),
+  // and by the page where the highlight ACTUALLY landed (page) — they can
+  // differ when highlight_lib's cross-page fallback relocated a passage.
+  // Lookup priority for an inline pill written as "(p. N)":
+  //   1. byClaimed[N] — matches if a passage was claimed on page N
+  //   2. byActual[N]  — matches if a highlight ended up on page N for any
+  //                     reason (covers the case where the model writes
+  //                     (p. N) inline but lists the passage with a
+  //                     different page that got relocated to N)
+  // If both miss, the pill is an "orphan" — the model wrote a page ref
+  // with no backing passage; we render it gray (.unmatched).
   const byClaimed = {};
+  const byActual = {};
   (citations || []).forEach(c => {
     if (c.found === false || !c.color) return;
     const claimed = c.original_page != null ? c.original_page : c.page;
     (byClaimed[claimed] = byClaimed[claimed] || []).push(c);
+    (byActual[c.page] = byActual[c.page] || []).push(c);
   });
   // Cycle within each bucket: tables emit ~2 pills per chip (body + cite
   // column), so strict pairing exhausts.
-  const idx = {};
+  const idxC = {};
+  const idxA = {};
   const refs = root.querySelectorAll('.pageref');
   for (const ref of refs) {
     const pages = JSON.parse(ref.dataset.pages || '[]');
-    const claimed = pages[0];
-    const list = byClaimed[claimed];
-    if (list && list.length) {
-      const i = idx[claimed] || 0;
-      const c = list[i % list.length];
-      idx[claimed] = i + 1;
-      ref.style.backgroundColor = c.color;
+    const p = pages[0];
+    let cite = null;
+    if (byClaimed[p] && byClaimed[p].length) {
+      const i = idxC[p] || 0;
+      cite = byClaimed[p][i % byClaimed[p].length];
+      idxC[p] = i + 1;
+    } else if (byActual[p] && byActual[p].length) {
+      const i = idxA[p] || 0;
+      cite = byActual[p][i % byActual[p].length];
+      idxA[p] = i + 1;
+    }
+    if (cite) {
+      ref.style.backgroundColor = cite.color;
       ref.classList.remove('unmatched');
       // If the citation got relocated, rewrite the pill so display and
       // click target match where the highlight actually lives.
-      if (c.page !== claimed) {
-        ref.textContent = '(p. ' + c.page + ')';
-        ref.dataset.pages = JSON.stringify([c.page]);
+      if (cite.page !== p) {
+        ref.textContent = '(p. ' + cite.page + ')';
+        ref.dataset.pages = JSON.stringify([cite.page]);
       }
     } else {
       ref.classList.add('unmatched');

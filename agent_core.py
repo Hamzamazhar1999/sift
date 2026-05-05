@@ -98,6 +98,12 @@ FORMATTING:
   answer in a code block.
 - Cite inline with "(p. N)" immediately after each claim. Multiple pages:
   "(pp. 4, 7)".
+- EVERY INLINE "(p. N)" REFERENCE MUST HAVE A MATCHING ENTRY IN YOUR
+  PASSAGES LIST WITH THAT SAME PAGE NUMBER. Never write "(p. 14)" in the
+  prose unless the passages list also contains a passage with page=14.
+  Orphan inline references render as un-styled gray pills with no
+  highlight, which is wrong. If you cannot find a passage to back a claim,
+  do not cite a page for that claim.
 - No preamble ("Based on the PDF…", "The authors…"), no recap of the
   question, no closing summary.
 - Do NOT print the citations list or the highlighted-PDF path — the
