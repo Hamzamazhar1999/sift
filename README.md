@@ -19,12 +19,30 @@ piggybacks on your local [Claude Code][cc] session — no API keys to manage.
   which chip at a glance.
 - **Click-to-jump** — both inline `(p. 4)` references and the citation
   chips scroll the PDF to the right page on click.
-- **Three answer modes**
-  - `auto` (default): adapts to whatever the question asks for — list,
-    table, paragraph, single sentence. No imposed length.
-  - `strict`: only what the PDF explicitly says, no inference.
-  - `brainstorm`: surface gaps, weaknesses, and inferences — every claim
-    still anchored to a real passage.
+- **Three answer modes** — pick by how much initiative you want the model
+  to take:
+  - **`auto`** *(default)* — concise, extractive, shaped to the question.
+    Use when you're asking *about the paper*. Examples:
+    *"What does the paper claim about X?"*,
+    *"Which datasets did they evaluate on?"*,
+    *"Summarize section 4."*
+  - **`strict`** — pure extraction, never infer or interpret. Use when you
+    want the literal text only. Examples:
+    *"List exactly the methods they evaluated."*,
+    *"Quote the threats-to-validity section."*
+  - **`freehand`** — the model is your collaborator; the user prompt is
+    the spec. Inference, synthesis, application, and structural framing
+    are encouraged — every factual claim still anchored to a citation,
+    but inferences are marked ("suggests", "implies", "extending this").
+    Use for anything generative. Examples:
+    *"Fill this SLR rubric for me: [paste rubric]"*,
+    *"Draft a related-work paragraph that critically engages with this paper."*,
+    *"What hypotheses does the framework in §3 suggest about [my domain]?"*,
+    *"Identify weaknesses in their evaluation."*
+
+  Rule of thumb: **auto** for "tell me about the paper," **freehand** for
+  "use the paper to do something for me," **strict** when you don't want
+  the model adding any flavor.
 - **Per-PDF chat memory** — follow-up questions like "make that more
   concise" or "what did I ask first?" work because each turn sees the
   prior conversation. A clear button wipes history; turns rehydrate when
@@ -167,7 +185,7 @@ Endpoints (`app.py`):
 - `POST /ask`               SSE stream: `stats`, `text`, `tool`, `done`, `error`
 
 Per-turn options sent to `/ask`:
-`{ file_id, question, model: "haiku|sonnet|opus|inherit", mode: "auto|strict|brainstorm" }`.
+`{ file_id, question, model: "haiku|sonnet|opus|inherit", mode: "auto|strict|freehand" }`.
 
 The defaults (`DEFAULT_MODEL`, `DEFAULT_MODE`) and per-PDF turn cap
 (`MAX_TURNS_KEPT`) live in `agent_core.py` and `app.py` respectively.

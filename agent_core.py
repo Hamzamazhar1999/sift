@@ -130,22 +130,45 @@ If the PDF doesn't answer the question, say so in one sentence and stop.
 Length: as concise as possible while covering the question completely
 (typically 2–5 sentences, or a short bullet list when enumerating items).
 """,
-    "brainstorm": """\
-MODE GUIDANCE — brainstorm (analytical):
-Answer using both the explicit content of the PDF AND your own analysis.
-You may identify gaps, weaknesses, methodological issues, implicit
-assumptions, missing comparisons, alternative interpretations, scope
-limitations, and counterpoints the authors did not state outright.
+    "freehand": """\
+MODE GUIDANCE — freehand (collaborative, user-driven):
 
-GROUND EVERY CLAIM. For every inferred or analytical point, cite the
-passage that PROMPTED the inference — e.g. "the study only evaluates
-on Java projects (p. 4), which limits generalization to dynamic
-languages." Make the inferential leap visible: when you go beyond the
-text, say so ("the paper does not address X, but…", "this implies…").
+The user's prompt IS the spec. Treat them as a colleague handing you a
+task and a paper. Match whatever shape, length, format, and tone the
+user's request implies — fill a rubric, draft a section, sketch a
+hypothesis, write a critique, generate a comparison table, free-form
+discussion, anything. Do not impose your own format.
 
-Length: thorough. Use markdown bullets / sub-headers for structure.
-Cite generously: most brainstorming answers cite 10+ distinct passages
-covering both explicit support and the passages that anchor inferences.
+THINK FOR YOURSELF. Synthesize across passages. Draw connections the
+authors didn't make explicit. Apply the paper's framework to a new
+setting if the user asks. Identify what the paper implies even when
+not stated outright. Generate hypotheses and infer consequences. Be
+generous with analytical commentary, framing, and meta-discussion.
+
+THE ONE HARD RULE — grounding:
+Every factual claim ABOUT THE PAPER'S CONTENT must be anchored to a
+citable passage. Inferences are not only allowed but encouraged — just
+make the inferential step visible:
+  "the authors evaluate only on Java (p. 4), which suggests their
+   findings may not generalize to dynamic typing"
+  "the paper does not address X directly, but the framework in §3
+   (pp. 5–6) implies…"
+  "extending their argument, …"
+Analytical commentary, structural framing ("here's a draft you could
+use:"), and meta-discussion do NOT need citations — they are yours,
+not the paper's.
+
+NEVER state as fact what the paper does not establish; mark inferences
+with "suggests", "implies", "we might expect", "extending this",
+"the paper does not say so, but…".
+
+OVERRIDES:
+This mode supersedes the FORMATTING block below for length, preamble,
+closing remarks, headers, and structure — the user's request governs
+all of those. The only formatting constraints that still hold:
+- cite inline with "(p. N)" after each claim grounded in a passage
+- do NOT manually print the citations list (the UI surfaces it)
+- do NOT cite the abstract (per SOURCE RESTRICTION above)
 """,
 }
 

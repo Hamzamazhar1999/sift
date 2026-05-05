@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agent_core import (
@@ -25,6 +26,7 @@ PDF_DIR.mkdir(exist_ok=True)
 STATIC_DIR = ROOT / "static"
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # In-process per-PDF chat memory: file_id -> [{question, answer, citations}].
 # Volatile (lost on restart) — fine for v1; add disk persistence later if
