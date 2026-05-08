@@ -4,6 +4,7 @@ Run:
     uvicorn app:app --reload --port 8000
 Then open http://localhost:8000.
 """
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -58,7 +59,16 @@ async def upload(file: UploadFile = File(...)):
     return {"file_id": safe}
 
 
-_HIGHLIGHTED_SUFFIX = re.compile(r"_highlighted(?:_t\d+)?$")
+_HIGHLIGHTED_SUFFIX = re.compile(r"_highlighted(?:_t\d+(?:_[a-f0-9]+)?)?$")
+
+
+def _citations_hash(citations: list) -> str:
+    """Stable short hash of a turn's citations. Used as a cache key so the
+    per-turn highlighted PDF on disk is naturally invalidated whenever the
+    underlying citations change (e.g. across uvicorn restarts where CHATS
+    is wiped but old cache files survive)."""
+    blob = json.dumps(citations, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:10]
 
 
 @app.get("/pdfs")
@@ -79,7 +89,11 @@ async def get_pdf(file_id: str, highlighted: bool = False, turn: int | None = No
 
     `turn` (optional) — index into CHATS[file_id]. When set, regenerate
     the highlighted PDF using THAT turn's stored citations and serve it.
-    Cached on disk as `<stem>_highlighted_t{turn}.pdf`.
+    Cached on disk as `<stem>_highlighted_t{turn}_{hash}.pdf` where the
+    hash is derived from the citations content — so the cache key
+    naturally invalidates whenever content changes (across uvicorn
+    restarts, CHATS is wiped but disk caches survive; without a content
+    hash a new turn at index 0 would inherit a stale t0 file).
     """
     safe = Path(file_id).name
     src = PDF_DIR / safe
@@ -90,14 +104,12 @@ async def get_pdf(file_id: str, highlighted: bool = False, turn: int | None = No
         chats = CHATS.get(safe, [])
         if turn < 0 or turn >= len(chats):
             raise HTTPException(404, f"Turn {turn} not found")
-        out = PDF_DIR / f"{Path(safe).stem}_highlighted_t{turn}.pdf"
-        # Regenerate if missing — citations are immutable per turn so this
-        # is a one-time cost amortized over later iframe range requests.
+        cits = chats[turn].get("citations") or []
+        h = _citations_hash(cits)
+        out = PDF_DIR / f"{Path(safe).stem}_highlighted_t{turn}_{h}.pdf"
         if not out.exists():
             from highlight_lib import re_highlight_from_citations
-            re_highlight_from_citations(
-                str(src), str(out), chats[turn].get("citations") or []
-            )
+            re_highlight_from_citations(str(src), str(out), cits)
         return FileResponse(out, media_type="application/pdf")
 
     if highlighted:
