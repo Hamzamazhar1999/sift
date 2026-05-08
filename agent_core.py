@@ -98,6 +98,18 @@ FORMATTING:
   answer in a code block.
 - Cite inline with "(p. N)" immediately after each claim. Multiple pages:
   "(pp. 4, 7)".
+- INLINE REFS ↔ PASSAGES LIST MUST CORRESPOND BIDIRECTIONALLY:
+  · Every inline "(p. N)" must have a matching entry in `passages` with
+    that page number. Don't write "(p. 14)" unless `passages` includes
+    a passage with page=14.
+  · Every entry in `passages` must be referenced inline at least once
+    via "(p. N)". Don't include a passage in the list if you don't
+    intend to cite it in the prose — that produces a citation chip in
+    the UI that makes no sense to the reader.
+  Orphans either direction (inline ref with no passage, or passage with
+  no inline ref) are wrong. If you can't find a passage to back a claim,
+  drop the cite from the prose. If you have a passage you don't end up
+  citing, drop it from `passages`.
 - No preamble ("Based on the PDF…", "The authors…"), no recap of the
   question, no closing summary.
 - Do NOT print the citations list or the highlighted-PDF path — the
