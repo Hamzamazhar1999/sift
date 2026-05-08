@@ -5,6 +5,7 @@ Run:
 Then open http://localhost:8000.
 """
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -57,24 +58,55 @@ async def upload(file: UploadFile = File(...)):
     return {"file_id": safe}
 
 
+_HIGHLIGHTED_SUFFIX = re.compile(r"_highlighted(?:_t\d+)?$")
+
+
 @app.get("/pdfs")
 async def list_pdfs():
     return {
         "files": sorted(
-            p.name for p in PDF_DIR.glob("*.pdf") if not p.stem.endswith("_highlighted")
+            p.name
+            for p in PDF_DIR.glob("*.pdf")
+            if not _HIGHLIGHTED_SUFFIX.search(p.stem)
         )
     }
 
 
 @app.get("/pdf/{file_id}")
-async def get_pdf(file_id: str, highlighted: bool = False):
+async def get_pdf(file_id: str, highlighted: bool = False, turn: int | None = None):
+    """Serve the original PDF, the latest highlighted PDF, or a per-turn
+    re-render of an arbitrary past turn's highlights.
+
+    `turn` (optional) — index into CHATS[file_id]. When set, regenerate
+    the highlighted PDF using THAT turn's stored citations and serve it.
+    Cached on disk as `<stem>_highlighted_t{turn}.pdf`.
+    """
     safe = Path(file_id).name
-    path = (
-        PDF_DIR / f"{Path(safe).stem}_highlighted.pdf" if highlighted else PDF_DIR / safe
-    )
-    if not path.exists():
-        raise HTTPException(404, f"Not found: {path.name}")
-    return FileResponse(path, media_type="application/pdf")
+    src = PDF_DIR / safe
+    if not src.exists():
+        raise HTTPException(404, f"Not found: {safe}")
+
+    if turn is not None:
+        chats = CHATS.get(safe, [])
+        if turn < 0 or turn >= len(chats):
+            raise HTTPException(404, f"Turn {turn} not found")
+        out = PDF_DIR / f"{Path(safe).stem}_highlighted_t{turn}.pdf"
+        # Regenerate if missing — citations are immutable per turn so this
+        # is a one-time cost amortized over later iframe range requests.
+        if not out.exists():
+            from highlight_lib import re_highlight_from_citations
+            re_highlight_from_citations(
+                str(src), str(out), chats[turn].get("citations") or []
+            )
+        return FileResponse(out, media_type="application/pdf")
+
+    if highlighted:
+        path = PDF_DIR / f"{Path(safe).stem}_highlighted.pdf"
+        if not path.exists():
+            raise HTTPException(404, f"Not found: {path.name}")
+        return FileResponse(path, media_type="application/pdf")
+
+    return FileResponse(src, media_type="application/pdf")
 
 
 class AskBody(BaseModel):
@@ -107,8 +139,15 @@ async def get_history(file_id: str):
 
 @app.post("/clear/{file_id}")
 async def clear_history(file_id: str):
-    """Wipe stored chat for a PDF."""
-    CHATS.pop(_safe_id(file_id), None)
+    """Wipe stored chat for a PDF and remove any per-turn cached PDFs."""
+    safe = _safe_id(file_id)
+    CHATS.pop(safe, None)
+    stem = Path(safe).stem
+    for cached in PDF_DIR.glob(f"{stem}_highlighted_t*.pdf"):
+        try:
+            cached.unlink()
+        except OSError:
+            pass
     return {"ok": True}
 
 

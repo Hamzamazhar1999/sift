@@ -95,6 +95,48 @@ def _best_match_across_pages(doc, quote: str, prefer_page: int | None = None):
     return best
 
 
+def _hex_to_rgb(hex_str: str):
+    h = (hex_str or "").lstrip("#")
+    if len(h) != 6:
+        return (1.0, 0.92, 0.48)  # default soft yellow
+    return (int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255)
+
+
+def re_highlight_from_citations(
+    input_pdf: str,
+    output_pdf: str,
+    citations: list,
+):
+    """Re-render a highlighted PDF from a previously-stored citations list,
+    preserving each citation's color. Used to recreate a past turn's
+    highlights when the user clicks a chip from chat history.
+
+    Uses each citation's `page` (where the highlight actually landed) plus
+    `quote` (the text that got highlighted last time) plus `color`. We
+    re-run find_quote_rects to get fresh coordinates — passage rects are
+    not stored in citations.json — but the page and matched text already
+    converged on the first pass, so this is reliable and idempotent.
+    """
+    doc = pymupdf.open(input_pdf)
+    for c in citations or []:
+        if not c.get("found"):
+            continue
+        page_num = int(c.get("page", 0))
+        if page_num < 1 or page_num > len(doc):
+            continue
+        page = doc[page_num - 1]  # keep Page in scope across set_colors calls
+        rects, _ = find_quote_rects(page, c.get("quote", ""))
+        if not rects:
+            continue
+        rgb = _hex_to_rgb(c.get("color", ""))
+        for r in rects:
+            annot = page.add_highlight_annot(r)
+            annot.set_colors(stroke=rgb)
+            annot.update()
+    doc.save(output_pdf)
+    doc.close()
+
+
 def highlight_pdf(
     input_pdf: str,
     output_pdf: str,

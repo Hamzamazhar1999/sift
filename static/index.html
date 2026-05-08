@@ -516,8 +516,9 @@ function loadFile(name) {
   loadHistory();
 }
 
-function renderPastTurn(t) {
+function renderPastTurn(t, turnIdx) {
   const turn = turnEl();
+  turn.dataset.turnIdx = String(turnIdx);
   turn.appendChild(el('div', 'q', 'Q: ' + t.question));
   const answer = el('div', 'answer');
   answer.innerHTML = renderMarkdown(t.answer || '');
@@ -527,29 +528,46 @@ function renderPastTurn(t) {
   if (cites.length) {
     const box = el('div', 'citations');
     box.appendChild(el('h4', null, 'Citations'));
-    cites.forEach(c => buildCitationChip(c, box));
+    cites.forEach(c => buildCitationChip(c, box, turnIdx));
     turn.appendChild(box);
   }
   colorPageRefs(answer, cites);
   log.appendChild(turn);
 }
 
-function buildCitationChip(c, box) {
+function buildCitationChip(c, box, turnIdx) {
   const cite = el('div', 'citation' + (c.found === false ? ' missing' : ''));
   if (c.color) cite.style.borderLeftColor = c.color;
   cite.appendChild(el('span', 'pg', 'p.' + c.page));
   cite.appendChild(document.createTextNode(c.quote));
   if (c.found !== false) {
-    cite.addEventListener('click', () => {
-      showHighlighted.checked = true;
-      reloadFrame(c.page);
-    });
+    cite.addEventListener('click', () => loadTurnPdf(turnIdx, c.page));
   }
   box.appendChild(cite);
 }
 
+// Load the highlighted PDF rendered specifically for `turnIdx` (the
+// citations from that past turn) and jump to `page`. Falls back to the
+// latest-turn highlighted PDF when turnIdx is undefined.
+function loadTurnPdf(turnIdx, page) {
+  if (!fileId) return;
+  showHighlighted.checked = true;
+  hasHighlighted = true;
+  const params = new URLSearchParams();
+  if (Number.isInteger(turnIdx)) params.set('turn', String(turnIdx));
+  else params.set('highlighted', 'true');
+  params.set('t', Date.now());
+  let u = '/pdf/' + encodeURIComponent(fileId) + '?' + params.toString();
+  if (page) u += '#page=' + page;
+  pdfFrame.src = u;
+}
+
+// Total turns currently rendered in the chat for the active PDF — used as
+// the next live turn's index when /ask completes. Reset on file switch.
+let turnCount = 0;
+
 async function loadHistory() {
-  if (!fileId) { clearBtn.disabled = true; return; }
+  if (!fileId) { clearBtn.disabled = true; turnCount = 0; return; }
   let turns = [];
   try {
     const r = await fetch('/history/' + encodeURIComponent(fileId));
@@ -558,10 +576,12 @@ async function loadHistory() {
   if (!turns.length) {
     log.innerHTML = '<div class="placeholder">Ask a question about this PDF.</div>';
     clearBtn.disabled = true;
+    turnCount = 0;
     return;
   }
   log.innerHTML = '';
-  turns.forEach(renderPastTurn);
+  turns.forEach((t, i) => renderPastTurn(t, i));
+  turnCount = turns.length;
   clearBtn.disabled = false;
   // Past turns may have generated a highlighted PDF; check if it exists.
   fetch('/pdf/' + encodeURIComponent(fileId) + '?highlighted=true', { method: 'HEAD' })
@@ -575,6 +595,12 @@ clearBtn.addEventListener('click', async () => {
   await fetch('/clear/' + encodeURIComponent(fileId), { method: 'POST' });
   log.innerHTML = '<div class="placeholder">Cleared. Ask a new question.</div>';
   clearBtn.disabled = true;
+  // Reset turn counter so the next live turn maps to CHATS[0] server-side
+  // — without this, ?turn=N requests look up an index that no longer exists.
+  turnCount = 0;
+  hasHighlighted = false;
+  showHighlighted.checked = false;
+  reloadFrame();
 });
 
 upload.addEventListener('change', async () => {
@@ -599,8 +625,12 @@ log.addEventListener('click', e => {
   if (!ref || !fileId) return;
   const pages = JSON.parse(ref.dataset.pages || '[]');
   if (!pages.length) return;
-  showHighlighted.checked = true;
-  reloadFrame(pages[0]);
+  // Walk up to the .turn element to find which turn this pill belongs to,
+  // so the iframe loads THAT turn's highlights, not the most recent.
+  const turnDom = ref.closest('.turn');
+  const idxStr = turnDom && turnDom.dataset.turnIdx;
+  const turnIdx = idxStr != null && idxStr !== '' ? parseInt(idxStr, 10) : undefined;
+  loadTurnPdf(turnIdx, pages[0]);
 });
 
 // Generic Claude-style activity verbs. Never task-specific — we don't expose
@@ -661,6 +691,8 @@ send.addEventListener('click', async () => {
   if (placeholder) log.innerHTML = '';
 
   const turn = turnEl();
+  const liveTurnIdx = turnCount;  // committed when the turn finishes
+  turn.dataset.turnIdx = String(liveTurnIdx);
   turn.appendChild(el('div', 'q', 'Q: ' + question));
   const stats = el('div', 'stats', '');
   turn.appendChild(stats);
@@ -789,10 +821,13 @@ send.addEventListener('click', async () => {
         if (cites.length) {
           const box = el('div', 'citations');
           box.appendChild(el('h4', null, 'Citations'));
-          cites.forEach(c => buildCitationChip(c, box));
+          cites.forEach(c => buildCitationChip(c, box, liveTurnIdx));
           turn.appendChild(box);
           colorPageRefs(answer, cites);
         }
+        // Commit the new turn so subsequent past-turn lookups know it
+        // exists in CHATS server-side.
+        turnCount = liveTurnIdx + 1;
         if (m.data.cost_usd) {
           meta.textContent = `$${m.data.cost_usd.toFixed(4)}`;
         }
