@@ -9,6 +9,10 @@ PDF viewer.
 Built on the [Claude Agent SDK][sdk] and [PyMuPDF][pymupdf]. Authentication
 piggybacks on your local [Claude Code][cc] session — no API keys to manage.
 
+<p align="center">
+  <img src="docs/sift-ss1.png" alt="sift — PDF on the left with color-matched highlights, chat on the right" width="900">
+</p>
+
 ## Features
 
 - **Two-pane web UI** — PDF on the left, chat on the right
