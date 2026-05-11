@@ -222,7 +222,11 @@ def _join_chunk(buf: str, chunk: str) -> str:
     return buf + " " + chunk
 
 
-_ABSTRACT_START = re.compile(r"^\s*(Abstract|ABSTRACT)\s*\.?\s*$", re.M)
+# Match the "Abstract" header in either form papers use:
+#   Abstract            (alone on its own line, followed by the body below)
+#   Abstract—Large...   (inline, with the body starting after a separator)
+# Separators we tolerate: whitespace, em-dash, en-dash, hyphen, colon, period.
+_ABSTRACT_START = re.compile(r"^\s*(?:Abstract|ABSTRACT)\b[\s.:\-–—]*", re.M)
 
 # Patterns that mark the end of the abstract. We stop at whichever appears
 # first — footnotes typically follow the abstract on the same page, before
