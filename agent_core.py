@@ -73,6 +73,36 @@ Do this end-to-end without asking for confirmation:
 5. Verify both OUTPUT PDF and CITATIONS JSON exist.
 6. Output the final answer.
 
+SOURCE RESTRICTION — what to do when the answer is NOT in the paper:
+- If the paper does not address the question, lead with one short sentence
+  saying so explicitly — phrasings like "Not addressed in this paper",
+  "The paper does not discuss X", or "X is not covered." Then stop.
+- Return an EMPTY `passages` list in that case. Do not cite tangentially
+  related sentences as if they answered the question. Citing tangential
+  content is worse than saying the paper doesn't cover the topic.
+- The user prefers a clean "no" over a fabricated "yes."
+
+SECTION ROUTING — cite from the right part of the paper:
+- The pages text file marks each section with sentinel lines:
+      [SECTION: <name> BEGIN]
+      ... body ...
+      [SECTION: <name> END]
+- Use the section a passage lives in to decide whether it is appropriate
+  for the question. In particular:
+  · Empirical questions ("what results / accuracy / performance / findings"):
+    cite from Results / Evaluation / Experiments / Findings / Discussion.
+    DO NOT cite
+    from Related Work or Background — those sentences describe what OTHER
+    authors reported, not what THIS paper found.
+  · Methodology questions ("how does it work / what approach"):
+    cite from Methods / Approach / Implementation / Experimental Setup.
+  · Prior-work questions ("what does prior work do / how does this differ"):
+    cite from Related Work / Background — these are appropriate here.
+  · Threats / limitations questions: cite from Threats to Validity /
+    Limitations / Discussion.
+- If a section is unrecognised (kept as a literal title rather than a
+  canonical label), use the title and your judgement.
+
 SOURCE RESTRICTION — abstract is OFF-LIMITS (every mode):
 - The pages text file marks the abstract with literal sentinel lines:
       [BEGIN ABSTRACT — DO NOT CITE FROM HERE]
@@ -268,6 +298,178 @@ def _mark_abstract(text: str) -> str:
     )
 
 
+# Section-header detection. Papers use several shapes; we try each, collect
+# all (pos, title) candidates, then carve the document into labelled sections.
+# Detection runs AFTER abstract marking so the abstract block isn't re-wrapped.
+_CANONICAL_NAMES = (
+    r"Introduction|Background|Related Work|Related Works?|Prior Work|"
+    r"Literature Review|Methodology|Methods?|Method|Approach|Implementation|"
+    r"Experimental Setup|Experiments?|Evaluation|Results?|Findings?|Analysis|"
+    r"Discussion|Threats to Validity|Limitations?|Future Work|Conclusions?|"
+    r"Acknowledg(?:e)?ments?|References"
+)
+_SECTION_PATTERNS = [
+    # "II.\nLARGE LANGUAGE MODELS" or "4\nOUR METHOD"  (Roman/Arabic prefix,
+    # ALL-CAPS title on the next line, must be multi-word so single-token
+    # table cells like "GPT-3" / "MAWPS" don't trip it).
+    re.compile(
+        r"^(?:[IVXLCDM]+|\d+)\.?\s*\n"
+        r"(?P<title>[A-Z][A-Z0-9,&'’\-]*\s+[A-Z][A-Z 0-9,&'’\-]{1,60})\s*$",
+        re.M,
+    ),
+    # "II. LARGE LANGUAGE MODELS"  (Roman/Arabic + ALL-CAPS title same line)
+    re.compile(
+        r"^(?:[IVXLCDM]+|\d+)\.?\s+"
+        r"(?P<title>[A-Z][A-Z0-9,&'’\-]*\s+[A-Z][A-Z 0-9,&'’\-]{1,60})\s*$",
+        re.M,
+    ),
+    # "1 Introduction" / "2. Related Work"  (numbered, must be a canonical name)
+    re.compile(
+        r"^\s*\d+\.?\s+(?P<title>" + _CANONICAL_NAMES + r")\s*$",
+        re.M | re.I,
+    ),
+    # Standalone canonical name on its own line
+    re.compile(
+        r"^\s*(?P<title>" + _CANONICAL_NAMES + r")\s*$",
+        re.M | re.I,
+    ),
+]
+
+# A few canonical names ALSO appear as table column headers in papers
+# (LoRA's "Method" column is the motivating case). For those — and only
+# those — we drop the match unless the following line is real prose.
+_AMBIGUOUS_HEADERS = {"method", "methods", "methodology", "approach"}
+
+
+def _looks_like_table_cell(title: str) -> bool:
+    """Reject multi-word titles that are obviously benchmark-table content
+    ('ROC AUC', 'OOM OOM', 'BLOOM-175B A100-80GB', 'IN IN-V2'). Two cheap
+    rules cover them all without losing legitimate titles like
+    'OUR METHOD' or 'DECOUPLING THE WEIGHT DECAY …':
+    1. fewer than 8 alphabetic characters overall, or
+    2. any word with ≥30% digit characters (i.e. model/GPU names)."""
+    words = title.split()
+    if len(words) < 2:
+        return False  # single-word already filtered upstream
+    if sum(c.isalpha() for c in title) < 8:
+        return True
+    for w in words:
+        alnum = sum(c.isalnum() for c in w)
+        digits = sum(c.isdigit() for c in w)
+        if alnum and digits / alnum > 0.3:
+            return True
+    return False
+
+
+def _has_prose_followup(text: str, pos: int, min_chars: int = 40) -> bool:
+    """Return True if the next non-blank line after pos is substantial prose.
+    Table cells (column headers' siblings) tend to be short; section bodies
+    open with a paragraph."""
+    for line in text[pos : pos + 2000].splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        return len(s) >= min_chars
+    return False
+
+# Map detected raw titles to a small set of canonical labels so the prompt
+# rule can route by intent. Anything else is preserved verbatim.
+_CANONICAL = {
+    "introduction": "Introduction",
+    "background": "Background",
+    "related work": "Related Work",
+    "related works": "Related Work",
+    "prior work": "Related Work",
+    "literature review": "Related Work",
+    "methodology": "Methods",
+    "methods": "Methods",
+    "method": "Methods",
+    "approach": "Methods",
+    "implementation": "Methods",
+    "experimental setup": "Methods",
+    "experiments": "Experiments",
+    "experiment": "Experiments",
+    "evaluation": "Evaluation",
+    "results": "Results",
+    "result": "Results",
+    "findings": "Results",
+    "finding": "Results",
+    "analysis": "Results",
+    "discussion": "Discussion",
+    "threats to validity": "Threats to Validity",
+    "limitations": "Limitations",
+    "limitation": "Limitations",
+    "future work": "Future Work",
+    "conclusion": "Conclusion",
+    "conclusions": "Conclusion",
+    "acknowledgments": "Acknowledgments",
+    "acknowledgements": "Acknowledgments",
+    "references": "References",
+}
+
+
+def _canonical_section(title: str) -> str:
+    return _CANONICAL.get(title.strip().lower(), title.strip())
+
+
+def _mark_sections(text: str) -> str:
+    """Wrap each detected section's body in BEGIN/END SECTION sentinels so
+    the prompt rule can route citations by section. Returns text unchanged
+    if no section starts are found."""
+    starts = []  # list of (header_end_pos, canonical_name)
+    for pat in _SECTION_PATTERNS:
+        for m in pat.finditer(text):
+            title = m.group("title").strip()
+            if _looks_like_table_cell(title):
+                continue
+            raw = title.lower()
+            if raw in _AMBIGUOUS_HEADERS and not _has_prose_followup(text, m.end()):
+                continue
+            starts.append((m.end(), _canonical_section(title)))
+    if not starts:
+        return text
+    starts.sort()
+    # Dedupe: skip adjacent positions and skip repeats of the same canonical
+    # name (a paper's roadmap paragraph re-mentioning section titles, or
+    # near-identical regex matches on the same header).
+    deduped = []
+    seen_names = set()
+    for pos, name in starts:
+        if deduped and pos - deduped[-1][0] < 5:
+            continue
+        if name in seen_names:
+            continue
+        deduped.append((pos, name))
+        seen_names.add(name)
+    pieces = []
+    last_pos = 0
+    for i, (pos, name) in enumerate(deduped):
+        body_start = pos
+        body_end = deduped[i + 1][0] if i + 1 < len(deduped) else len(text)
+        # Find header start so we can preserve the prologue verbatim
+        # (everything before THIS section header's body_start that came after
+        # the previous section's body_end).
+        prologue_end = body_start
+        # Heuristic: the header is on the line(s) immediately before body_start.
+        # We want to keep it visible, so wrap from body_start (just after header).
+        if i == 0:
+            pieces.append(text[last_pos:body_start])
+        body = text[body_start:body_end]
+        # Skip very short sections — likely TOC/list items, not real bodies
+        if len(body.strip()) < 200:
+            pieces.append(body)
+            last_pos = body_end
+            continue
+        pieces.append(
+            "\n[SECTION: " + name + " BEGIN]\n"
+            + body.strip("\n")
+            + "\n[SECTION: " + name + " END]\n"
+        )
+        last_pos = body_end
+    pieces.append(text[last_pos:])
+    return "".join(pieces)
+
+
 def extract_pages(pdf_path: Path) -> tuple[Path, str, int]:
     """Returns (path, full_text, page_count). Also writes the text to a
     sibling .pages.txt file for inspection."""
@@ -276,7 +478,7 @@ def extract_pages(pdf_path: Path) -> tuple[Path, str, int]:
     parts = [f"=== PAGE {i+1} ===\n{page.get_text()}" for i, page in enumerate(doc)]
     page_count = len(parts)
     doc.close()
-    text = _mark_abstract("\n\n".join(parts))
+    text = _mark_sections(_mark_abstract("\n\n".join(parts)))
     # Force UTF-8: PDF text contains ligatures (ﬁ ﬂ), em-dashes, smart
     # quotes, etc. Windows' default cp1252 can't encode them.
     out.write_text(text, encoding="utf-8")
