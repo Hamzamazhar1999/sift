@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 
 from agent_core import (
+    BACKEND_CHOICES,
+    DEFAULT_BACKEND,
     DEFAULT_MODE,
     DEFAULT_MODEL,
     MODE_CHOICES,
@@ -18,14 +20,18 @@ from agent_core import (
 )
 
 
-async def main(pdf_path: str, question: str, model: str, mode: str) -> None:
+async def main(
+    pdf_path: str, question: str, model: str, mode: str, backend: str
+) -> None:
     pdf = Path(pdf_path).resolve()
     if not pdf.exists():
         sys.exit(f"PDF not found: {pdf}")
 
-    print(f"→ Asking Claude ({model}, {mode}) about {pdf.name}\n")
+    print(f"→ Asking sift ({backend} / {model} / {mode}) about {pdf.name}\n")
 
-    async for kind, payload in run_agent(pdf, question, model=model, mode=mode):
+    async for kind, payload in run_agent(
+        pdf, question, model=model, mode=mode, backend=backend
+    ):
         if kind == "text":
             print(payload, end="", flush=True)
         elif kind == "tool":
@@ -60,5 +66,17 @@ if __name__ == "__main__":
         choices=MODE_CHOICES,
         help=f"Answer mode (default: {DEFAULT_MODE})",
     )
+    ap.add_argument(
+        "--backend",
+        default=DEFAULT_BACKEND,
+        choices=BACKEND_CHOICES,
+        help=(
+            f"Which CLI to spawn behind the SDK (default: {DEFAULT_BACKEND}). "
+            f"`openclaude` routes to OpenAI / Gemini / OpenRouter / Ollama "
+            f"depending on its own provider config."
+        ),
+    )
     args = ap.parse_args()
-    asyncio.run(main(args.pdf_path, " ".join(args.question), args.model, args.mode))
+    asyncio.run(
+        main(args.pdf_path, " ".join(args.question), args.model, args.mode, args.backend)
+    )

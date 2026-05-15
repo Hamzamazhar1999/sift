@@ -204,6 +204,9 @@
     <label style="font-size:12px;color:var(--muted)">mode
       <select id="mode"></select>
     </label>
+    <label style="font-size:12px;color:var(--muted)" title="Which CLI binary the agent spawns. `claude` = official Claude Code (Anthropic). `openclaude` = drop-in alternative that can route to OpenRouter / OpenAI / Gemini / etc. Configure the underlying provider in the chosen CLI itself.">backend
+      <select id="backend"></select>
+    </label>
     <button id="send" disabled>Ask</button>
   </div>
 </div>
@@ -218,6 +221,7 @@ const q = document.getElementById('q');
 const log = document.getElementById('log');
 const modelSelect = document.getElementById('model');
 const modeSelect = document.getElementById('mode');
+const backendSelect = document.getElementById('backend');
 const clearBtn = document.getElementById('clear');
 const themeToggle = document.getElementById('theme-toggle');
 
@@ -284,21 +288,52 @@ function populate(sel, cfg, storageKey) {
   sel.addEventListener('change', () => localStorage.setItem(storageKey, sel.value));
 }
 
+// Backend details (per-backend model lists + display labels). Captured
+// from /config so we can repopulate the model dropdown when the user
+// switches backends — different CLIs accept different model aliases.
+let BACKEND_DETAILS = {};
+
+function modelCfgFor(backendName) {
+  const d = BACKEND_DETAILS[backendName];
+  if (!d) return null;
+  return { choices: d.models, default: d.default_model };
+}
+
 (async () => {
   const fallback = {
-    models: { choices: ['haiku', 'sonnet', 'opus', 'inherit'], default: 'haiku' },
-    modes:  { choices: ['strict', 'brainstorm'],               default: 'strict' },
+    models:   { choices: ['haiku', 'sonnet', 'opus', 'inherit'], default: 'haiku' },
+    modes:    { choices: ['auto', 'strict', 'freehand'],         default: 'auto' },
+    backends: {
+      choices: ['claude', 'openclaude'],
+      default: 'claude',
+      details: {
+        claude:     { models: ['haiku', 'sonnet', 'opus', 'inherit'], default_model: 'haiku' },
+        openclaude: { models: ['inherit'],                            default_model: 'inherit' },
+      },
+    },
   };
   let j = fallback;
   try {
     const r = await fetch('/config');
     if (r.ok) {
       const data = await r.json();
-      if (data && data.models && data.modes) j = data;
+      if (data && data.models && data.modes) j = { ...fallback, ...data };
     }
   } catch (_) { /* fall through to defaults */ }
-  populate(modelSelect, j.models, 'sift.model');
+
+  BACKEND_DETAILS = (j.backends && j.backends.details) || fallback.backends.details;
   populate(modeSelect, j.modes, 'sift.mode');
+  populate(backendSelect, j.backends || fallback.backends, 'sift.backend');
+
+  // Model choices follow the currently-selected backend. When the user
+  // picks a different backend later, repopulate from BACKEND_DETAILS.
+  const initialModelCfg = modelCfgFor(backendSelect.value) || j.models;
+  populate(modelSelect, initialModelCfg, 'sift.model');
+
+  backendSelect.addEventListener('change', () => {
+    const cfg = modelCfgFor(backendSelect.value);
+    if (cfg) populate(modelSelect, cfg, 'sift.model');
+  });
 })();
 
 // --- minimal markdown renderer (bold, italic, code, lists, headings, links) ---
@@ -741,7 +776,7 @@ send.addEventListener('click', async () => {
     r = await fetch('/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: fileId, question, model: modelSelect.value, mode: modeSelect.value }),
+      body: JSON.stringify({ file_id: fileId, question, model: modelSelect.value, mode: modeSelect.value, backend: backendSelect.value }),
     });
   } catch (e) {
     stopThinking();

@@ -15,6 +15,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agent_core import (
+    BACKEND_CHOICES,
+    BACKENDS,
+    DEFAULT_BACKEND,
     DEFAULT_MODE,
     DEFAULT_MODEL,
     MODE_CHOICES,
@@ -126,6 +129,7 @@ class AskBody(BaseModel):
     question: str
     model: str = DEFAULT_MODEL
     mode: str = DEFAULT_MODE
+    backend: str = DEFAULT_BACKEND
 
 
 @app.get("/config")
@@ -133,6 +137,11 @@ async def config():
     return {
         "models": {"choices": list(MODEL_CHOICES), "default": DEFAULT_MODEL},
         "modes": {"choices": list(MODE_CHOICES), "default": DEFAULT_MODE},
+        "backends": {
+            "choices": list(BACKEND_CHOICES),
+            "default": DEFAULT_BACKEND,
+            "details": BACKENDS,  # per-backend model list + display name
+        },
     }
 
 
@@ -173,6 +182,8 @@ async def ask(body: AskBody):
         raise HTTPException(400, f"Unknown model: {body.model}")
     if body.mode not in MODE_CHOICES:
         raise HTTPException(400, f"Unknown mode: {body.mode}")
+    if body.backend not in BACKEND_CHOICES:
+        raise HTTPException(400, f"Unknown backend: {body.backend}")
 
     history = list(CHATS.get(safe, []))
 
@@ -186,6 +197,7 @@ async def ask(body: AskBody):
                 model=body.model,
                 mode=body.mode,
                 history=history,
+                backend=body.backend,
             ):
                 if kind == "done":
                     final_answer = payload.get("answer") or ""
