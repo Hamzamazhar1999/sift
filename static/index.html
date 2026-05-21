@@ -154,6 +154,7 @@
   #log .citations h4 { margin: 4px 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
   .citation { display: block; background: var(--cite-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 7px 10px; margin: 5px 0; border-radius: 4px; cursor: pointer; font-size: 12.5px; line-height: 1.4; color: var(--text); transition: background 0.1s; box-shadow: var(--shadow); }
   .citation:hover { background: var(--cite-bg-hover); }
+  .citation .idx { font-weight: 700; color: var(--accent); margin-right: 5px; font-variant-numeric: tabular-nums; }
   .citation .pg { font-weight: 600; color: var(--accent); margin-right: 6px; }
   .citation.missing { background: var(--cite-missing-bg); border-color: var(--cite-missing-border); border-left-color: var(--muted); color: var(--muted); cursor: default; box-shadow: none; }
 
@@ -348,29 +349,60 @@ function inlineMd(s) {
   s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   return s;
 }
-// Walk text nodes under `root` and turn "(p. N)" / "(pp. N, M)" into clickable
-// .pageref spans. dataset.pages is a JSON array of page numbers.
+// Walk text nodes under `root` and turn citation markers into clickable
+// .pageref spans. Two formats are supported:
+//   Numbered (current):  "[3]", "[3, 7]"   — N indexes into `passages`
+//   Legacy (older runs): "(p. 4)", "(pp. 4, 7)" — N is a literal page
+// For numbered refs we store dataset.indices = "[3,7]" (1-indexed passages).
+// For legacy refs we store dataset.pages = "[4,7]" (raw page numbers).
+// Page numbers for navigation are resolved later in colorPageRefs once we
+// have the citation list to look the index up in.
 function linkifyPageRefs(root) {
-  const re = /\((pp?\.?)\s*([\d][\d,\s–—\-]*)\)/g;
+  const reNum = /\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]/g;
+  const reLegacy = /\((pp?\.?)\s*([\d][\d,\s–—\-]*)\)/g;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
   const nodes = [];
   for (let n; (n = walker.nextNode()); ) {
     if (n.parentNode && n.parentNode.classList && n.parentNode.classList.contains('pageref')) continue;
-    if (re.test(n.nodeValue)) { re.lastIndex = 0; nodes.push(n); }
+    const v = n.nodeValue;
+    reNum.lastIndex = 0; reLegacy.lastIndex = 0;
+    if (reNum.test(v) || reLegacy.test(v)) nodes.push(n);
   }
   for (const node of nodes) {
     const s = node.nodeValue;
+    // Find all matches from both regexes, then process in left-to-right order.
+    const matches = [];
+    let m;
+    reNum.lastIndex = 0;
+    while ((m = reNum.exec(s))) {
+      matches.push({ kind: 'num', start: m.index, end: m.index + m[0].length, text: m[0],
+        nums: m[1].split(/\s*,\s*/).map(x => parseInt(x, 10)).filter(Number.isFinite) });
+    }
+    reLegacy.lastIndex = 0;
+    while ((m = reLegacy.exec(s))) {
+      matches.push({ kind: 'pg', start: m.index, end: m.index + m[0].length, text: m[0],
+        nums: m[2].split(/[,\s–—\-]+/).filter(Boolean).map(x => parseInt(x, 10)).filter(Number.isFinite) });
+    }
+    matches.sort((a, b) => a.start - b.start);
+    // Drop overlaps (shouldn't really happen).
+    const kept = [];
+    let cur = -1;
+    for (const mt of matches) {
+      if (mt.start < cur) continue;
+      kept.push(mt); cur = mt.end;
+    }
+    if (!kept.length) continue;
     const frag = document.createDocumentFragment();
-    let last = 0; let m;
-    while ((m = re.exec(s))) {
-      if (m.index > last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+    let last = 0;
+    for (const mt of kept) {
+      if (mt.start > last) frag.appendChild(document.createTextNode(s.slice(last, mt.start)));
       const span = document.createElement('span');
       span.className = 'pageref';
-      span.textContent = m[0];
-      const pages = m[2].split(/[,\s–—\-]+/).filter(Boolean).map(p => parseInt(p, 10)).filter(Number.isFinite);
-      span.dataset.pages = JSON.stringify(pages);
+      span.textContent = mt.text;
+      if (mt.kind === 'num') span.dataset.indices = JSON.stringify(mt.nums);
+      else                   span.dataset.pages   = JSON.stringify(mt.nums);
       frag.appendChild(span);
-      last = m.index + m[0].length;
+      last = mt.end;
     }
     if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
     node.parentNode.replaceChild(frag, node);
@@ -378,38 +410,53 @@ function linkifyPageRefs(root) {
 }
 
 // Color each .pageref span under `root` with its matching citation's color.
-// Mapping: walk pagerefs in document order, build a per-page queue of
-// citations, and pop the next citation off the queue whose page matches the
-// pageref's first page. Pagerefs that don't find a match get marked
-// .unmatched (rendered in the plain accent style).
+// Two paths:
+//   Numbered refs (dataset.indices): direct lookup citations[N-1] — exact
+//     1-to-1 mapping, no ambiguity.
+//   Legacy page refs (dataset.pages): fall back to the old positional cycle
+//     through citations on that page.
+// This function also populates dataset.pages on numbered refs so the click
+// handler can navigate to the right PDF page without a second lookup.
 function colorPageRefs(root, citations) {
-  // Group citations by page, in original order.
+  const cites = citations || [];
+  // Legacy bucketing — only used when we see (p. N)-style refs.
   const byPage = {};
-  (citations || []).forEach(c => {
+  cites.forEach(c => {
     if (c.found === false || !c.color) return;
     (byPage[c.page] = byPage[c.page] || []).push(c);
   });
-  // Walk pagerefs in document order; for each page keep a per-page index
-  // and CYCLE through that page's citations rather than draining the queue.
-  // Tables tend to emit two (p. N) pills per row (body claim + citation
-  // column) for one citation chip — strict pairing exhausts and the rest
-  // fall back to orange. Cycling keeps every pill in the same color family
-  // as its chip even when there are more references than chips.
-  const idx = {};
+  const idx = {};  // per-page cycle counter (legacy path only)
   const refs = root.querySelectorAll('.pageref');
   for (const ref of refs) {
-    const pages = JSON.parse(ref.dataset.pages || '[]');
-    const p = pages[0];
-    const list = byPage[p];
-    if (list && list.length) {
-      const i = idx[p] || 0;
-      const c = list[i % list.length];
-      idx[p] = i + 1;
-      ref.style.backgroundColor = c.color;
-      ref.classList.remove('unmatched');
+    if (ref.dataset.indices) {
+      const indices = JSON.parse(ref.dataset.indices);
+      const primary = cites[indices[0] - 1];
+      if (primary && primary.found !== false && primary.color) {
+        ref.style.backgroundColor = primary.color;
+        ref.classList.remove('unmatched');
+      } else {
+        ref.classList.add('unmatched');
+        ref.style.backgroundColor = '';
+      }
+      // Resolve passage indices → page numbers so click navigation works.
+      const pages = indices
+        .map(i => cites[i - 1] && cites[i - 1].page)
+        .filter(p => Number.isFinite(p));
+      if (pages.length) ref.dataset.pages = JSON.stringify(pages);
     } else {
-      ref.classList.add('unmatched');
-      ref.style.backgroundColor = '';
+      const pages = JSON.parse(ref.dataset.pages || '[]');
+      const p = pages[0];
+      const list = byPage[p];
+      if (list && list.length) {
+        const i = idx[p] || 0;
+        const c = list[i % list.length];
+        idx[p] = i + 1;
+        ref.style.backgroundColor = c.color;
+        ref.classList.remove('unmatched');
+      } else {
+        ref.classList.add('unmatched');
+        ref.style.backgroundColor = '';
+      }
     }
   }
 }
@@ -563,16 +610,17 @@ function renderPastTurn(t, turnIdx) {
   if (cites.length) {
     const box = el('div', 'citations');
     box.appendChild(el('h4', null, 'Citations'));
-    cites.forEach(c => buildCitationChip(c, box, turnIdx));
+    cites.forEach((c, i) => buildCitationChip(c, box, turnIdx, i));
     turn.appendChild(box);
   }
   colorPageRefs(answer, cites);
   log.appendChild(turn);
 }
 
-function buildCitationChip(c, box, turnIdx) {
+function buildCitationChip(c, box, turnIdx, index) {
   const cite = el('div', 'citation' + (c.found === false ? ' missing' : ''));
   if (c.color) cite.style.borderLeftColor = c.color;
+  if (Number.isInteger(index)) cite.appendChild(el('span', 'idx', '[' + (index + 1) + ']'));
   cite.appendChild(el('span', 'pg', 'p.' + c.page));
   cite.appendChild(document.createTextNode(c.quote));
   if (c.found !== false) {
@@ -856,7 +904,7 @@ send.addEventListener('click', async () => {
         if (cites.length) {
           const box = el('div', 'citations');
           box.appendChild(el('h4', null, 'Citations'));
-          cites.forEach(c => buildCitationChip(c, box, liveTurnIdx));
+          cites.forEach((c, i) => buildCitationChip(c, box, liveTurnIdx, i));
           turn.appendChild(box);
           colorPageRefs(answer, cites);
         }

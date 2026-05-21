@@ -22,10 +22,11 @@ choice, not the code. The default backend is Anthropic's
 - **Two-pane web UI**. PDF on the left, chat on the right.
 - **Color-matched citations**. Each citation gets a distinct pastel
   color, applied to the PDF highlight, the citation chip's left border,
-  and the inline `(p. N)` pill in the answer text. When several citations
-  land on the same page, the colors tell you which highlight goes with
-  which chip at a glance.
-- **Click-to-jump**. Both inline `(p. 4)` references and the citation
+  and the inline `[N]` pill in the answer text. `N` is the chip's
+  1-indexed position, so `[3]` in the prose maps to the third chip and
+  to the same colored highlight in the PDF — one-to-one, even when
+  several citations land on the same page.
+- **Click-to-jump**. Both inline `[N]` references and the citation
   chips scroll the PDF to the right page on click.
 - **Three answer modes**. Pick by how much initiative you want the model
   to take.
@@ -138,7 +139,7 @@ uvicorn app:app --port 8000
 ```
 
 Open http://localhost:8000. Upload a PDF, ask a question, click any
-`(p. N)` reference or citation chip to jump.
+`[N]` reference or citation chip to jump.
 
 ### CLI
 
@@ -168,8 +169,8 @@ input PDF.
    lowercase + alphanumeric. Word-level matching survives anything
    `search_for` chokes on: line wraps, hyphenated breaks, ligatures.
 4. Citations JSON records the **actual highlighted text** plus a per-citation
-   pastel color, so the chip's border, the inline `(p. N)` pill, and the
-   yellow PDF region always agree.
+   pastel color, so the chip's border, the inline `[N]` pill, and the
+   highlighted PDF region always agree.
 5. **Per-PDF chat memory** lives in an in-process dict (`CHATS`) keyed by
    filename. Each `/ask` prepends the last 10 turns to the prompt as a
    `PRIOR CONVERSATION` block, so the agent can answer follow-ups that
