@@ -2,7 +2,6 @@
 """
 import json
 import re
-import shutil
 from pathlib import Path
 
 import pymupdf
@@ -512,54 +511,17 @@ def _tool_label(block: ToolUseBlock) -> str:
 #
 # Fields:
 #   display        — human-readable label for the UI dropdown
-#   binary         — name of the CLI to spawn (looked up via shutil.which).
-#                    None lets the Agent SDK do its own discovery,
-#                    useful when the binary lives in an installer-managed
-#                    location not on PATH (e.g. Anthropic's claude).
-#   models         — model aliases this backend's CLI accepts
-#   default_model  — sift's default when this backend is picked
-#
-# `inherit` means: let the CLI use whatever default it was configured with.
-BACKENDS = {
-    "claude": {
-        "display": "Claude Code (Anthropic)",
-        "binary": None,
-        "models": ["haiku", "sonnet", "opus", "inherit"],
-        "default_model": "haiku",
-    },
-    "openclaude": {
-        "display": "OpenClaude (OpenAI / Gemini / OpenRouter / Ollama)",
-        "binary": "openclaude",
-        "models": ["inherit"],
-        "default_model": "inherit",
-    },
-}
-BACKEND_CHOICES = tuple(BACKENDS.keys())
-DEFAULT_BACKEND = "claude"
-
-# Union of every backend's accepted model aliases — used purely for
-# /ask body validation. The chosen CLI does the real check at spawn time.
-MODEL_CHOICES = tuple(
-    dict.fromkeys(m for b in BACKENDS.values() for m in b["models"])
+# Backend / model registry lives in backends.py — touching that file is
+# how you add new providers without editing the agent loop here.
+from backends import (
+    BACKEND_CHOICES,
+    BACKENDS,
+    DEFAULT_BACKEND,
+    DEFAULT_MODEL,
+    MODEL_CHOICES,
+    resolve_cli_path as _resolve_cli_path,
+    resolve_profile as _resolve_profile,
 )
-DEFAULT_MODEL = BACKENDS[DEFAULT_BACKEND]["default_model"]
-
-
-def _resolve_cli_path(backend: str) -> str | None:
-    """Look up the CLI binary for a backend. Returns None when the entry
-    has no explicit binary (the SDK handles its own discovery in that
-    case)."""
-    binary = BACKENDS[backend].get("binary")
-    if binary is None:
-        return None
-    path = shutil.which(binary)
-    if not path:
-        raise FileNotFoundError(
-            f"backend `{backend}` expects the `{binary}` CLI on PATH "
-            f"but couldn't find it. Install it and ensure `{binary}` "
-            f"runs in your shell."
-        )
-    return path
 
 
 async def run_agent(
@@ -612,13 +574,16 @@ async def run_agent(
     )
 
     cli_path = _resolve_cli_path(backend)
+    cli_model, extra_args, extra_env = _resolve_profile(backend, model)
     options = ClaudeAgentOptions(
         allowed_tools=["Read", "Bash", "Write"],
         permission_mode="bypassPermissions",
         cwd=str(pdf_path.parent),
         max_buffer_size=20 * 1024 * 1024,
-        model=None if model == "inherit" else model,
+        model=cli_model,
         cli_path=cli_path,
+        extra_args=extra_args,
+        env=extra_env,
     )
 
     # Mirror the client's "text resets on tool" logic so we can capture the
