@@ -623,3 +623,131 @@ async def run_agent(
                     "answer": final_answer,
                 },
             )
+
+
+AGGREGATE_PROMPT = """\
+You are synthesizing answers to ONE question that was asked separately of
+{n} research papers. Below is each paper's answer followed by the exact
+passages it cited. Every cited passage has a GLOBAL citation number shown
+in [brackets] — those are the numbers you must cite with.
+
+QUESTION: {question}
+
+{bodies}
+
+Write ONE unified answer to the QUESTION that synthesizes across ALL of the
+papers above. Requirements:
+- Synthesize, don't list per-paper: compare and contrast what the papers
+  say. Call out where they agree, where they differ, and anything unique to
+  a single paper.
+- Ground every factual claim with the GLOBAL citation numbers in brackets,
+  e.g. "[3]" or "[3, 8]". The ONLY valid citation numbers are the ones that
+  appear at the START of a line in a "CITED PASSAGES" list above (the "[N]"
+  before "(p. X)"). Any numbers in parentheses inside answer or quote text
+  are NOT citation labels — never reuse them. Never invent a number.
+  The same passage may be cited more than once.
+- Refer to a paper by a short version of its name where it aids clarity.
+- Render as Markdown. Do NOT print a separate citations / sources list and
+  do NOT restate the question — the harness surfaces citations separately.
+- Be concise but cover the question across all the papers.
+"""
+
+
+# Caps so the synthesis prompt stays bounded even with many papers / long
+# freehand answers — important for the smaller-context OpenRouter models.
+_AGG_ANSWER_CAP = 4000   # chars of each paper's answer text
+_AGG_QUOTE_CAP = 400     # chars of each cited passage
+
+
+def _neutralize_brackets(text: str) -> str:
+    """Replace square brackets with parens in any text we inject into the
+    synthesis prompt. Academic passages and per-PDF answers contain their
+    own bracketed markers (bibliography refs like "Respector [51]", or the
+    per-PDF answer's own local "[2]" citations). Left as-is they collide
+    with the GLOBAL "[N]" labels we assign, and the model can echo a stray
+    "[51]" as if it were a real global citation — which then maps to the
+    wrong PDF or a dead pill. Turning them into "(51)" removes the
+    ambiguity while keeping the text readable; the ONLY square brackets the
+    model sees are the global labels at the start of each passage line."""
+    return (text or "").replace("[", "(").replace("]", ")")
+
+
+def _build_global_citations(per_pdf):
+    """Flatten per-PDF citation lists into ONE global, 1-indexed list.
+
+    Each per-PDF run numbers its own citations from 1; aggregation needs a
+    single namespace. Returns (global_cites, rendered_blocks) where each
+    global cite carries its source `file_id` (so the UI can open the right
+    PDF) plus page/quote/color, and `rendered_blocks` is the per-paper text
+    fed to the synthesis model with global [N] labels. The citation objects
+    keep the ORIGINAL quote (for the UI); only the prompt copy is
+    bracket-neutralized and length-capped."""
+    global_cites = []
+    blocks = []
+    for item in per_pdf:
+        fid = item["file_id"]
+        cites = item.get("citations") or []
+        answer = (item.get("answer") or "").strip()[:_AGG_ANSWER_CAP]
+        lines = [f"=== PAPER: {fid} ===", "ANSWER:", _neutralize_brackets(answer)]
+        if cites:
+            lines.append("CITED PASSAGES:")
+        for c in cites:
+            n = len(global_cites) + 1
+            global_cites.append({
+                "n": n,
+                "file_id": fid,
+                "page": c.get("page"),
+                "quote": c.get("quote"),   # UI keeps the verbatim quote
+                "color": c.get("color"),
+                "found": c.get("found", True),
+            })
+            q = _neutralize_brackets((c.get("quote") or "").strip()[:_AGG_QUOTE_CAP])
+            lines.append(f'[{n}] (p.{c.get("page")}) "{q}"')
+        blocks.append("\n".join(lines))
+    return global_cites, blocks
+
+
+async def aggregate_answers(question, per_pdf, model=DEFAULT_MODEL, backend=DEFAULT_BACKEND):
+    """Synthesize per-PDF answers into ONE cross-paper answer.
+
+    `per_pdf` is a list of {"file_id", "answer", "citations"} in display
+    order. Yields ("agg_text", delta) chunks as the model streams, then a
+    final ("agg_done", {"answer", "citations"}) where `citations` is the
+    GLOBAL list (each entry tagged with its source file_id + page + color +
+    global number `n`) so the client can colour chips and route clicks to
+    the right PDF."""
+    global_cites, blocks = _build_global_citations(per_pdf)
+    prompt = AGGREGATE_PROMPT.format(
+        n=len(per_pdf), question=question, bodies="\n\n".join(blocks)
+    )
+
+    cli_path = _resolve_cli_path(backend)
+    cli_model, extra_args, extra_env = _resolve_profile(backend, model)
+    options = ClaudeAgentOptions(
+        allowed_tools=[],          # pure text synthesis, no tools
+        permission_mode="bypassPermissions",
+        model=cli_model,
+        cli_path=cli_path,
+        extra_args=extra_args,
+        env=extra_env,
+        max_buffer_size=20 * 1024 * 1024,
+    )
+
+    text = ""
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock) and block.text:
+                    text = _join_chunk(text, block.text)
+                    yield ("agg_text", block.text)
+        elif isinstance(message, ResultMessage):
+            # The CLI can exit 0 yet report a logical failure (max turns,
+            # provider error, etc.) — surface it instead of returning an
+            # empty "success" that the caller would cache.
+            if getattr(message, "is_error", False):
+                raise RuntimeError(
+                    getattr(message, "result", None) or "synthesis failed"
+                )
+    if not text.strip():
+        raise RuntimeError("synthesis produced no text")
+    yield ("agg_done", {"answer": text.strip(), "citations": global_cites})

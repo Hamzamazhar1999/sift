@@ -108,24 +108,28 @@
   #log .turn { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px dashed var(--border); }
   #log .turn:last-child { border-bottom: 0; }
   #log .q { font-weight: 600; margin-bottom: 6px; color: var(--text); }
-  #log .answer { line-height: 1.55; color: var(--text); }
-  #log .answer p { margin: 0 0 8px; }
-  #log .answer p:last-child { margin-bottom: 0; }
-  #log .answer ul, #log .answer ol { margin: 4px 0 8px; padding-left: 22px; }
-  #log .answer li { margin: 2px 0; }
-  #log .answer h1, #log .answer h2, #log .answer h3 { margin: 10px 0 4px; font-size: 14px; color: var(--text); }
-  #log .answer code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; }
-  #log .answer table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; display: block; max-width: 100%; overflow-x: auto; }
-  #log .answer th, #log .answer td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; vertical-align: top; }
-  #log .answer th { background: var(--code-bg); font-weight: 600; }
-  #log .answer tbody tr:nth-child(even) td { background: var(--pane-bg); }
-  #log .answer strong { font-weight: 600; }
-  #log .answer a { color: var(--accent); }
+  /* Rich answer typography — shared by chat turns and compare columns. */
+  .answer { line-height: 1.55; color: var(--text); }
+  .answer p { margin: 0 0 8px; }
+  .answer p:last-child { margin-bottom: 0; }
+  .answer ul, .answer ol { margin: 4px 0 8px; padding-left: 22px; }
+  .answer li { margin: 2px 0; }
+  .answer h1, .answer h2, .answer h3 { margin: 10px 0 4px; font-size: 14px; color: var(--text); }
+  .answer code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; font-family: ui-monospace, Menlo, monospace; }
+  .answer table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; display: block; max-width: 100%; overflow-x: auto; }
+  .answer th, .answer td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; vertical-align: top; }
+  .answer th { background: var(--code-bg); font-weight: 600; }
+  .answer tbody tr:nth-child(even) td { background: var(--pane-bg); }
+  .answer strong { font-weight: 600; }
+  .answer a { color: var(--accent); }
 
-  /* Inline page-ref pill */
-  #log .pageref { color: #1a1a1c; cursor: pointer; font-weight: 500; padding: 1px 6px; border-radius: 4px; background: var(--pageref-bg); transition: filter 0.1s; }
-  #log .pageref:hover { filter: brightness(0.92); text-decoration: underline; }
-  #log .pageref.unmatched { color: var(--accent); background: transparent; padding: 0 1px; }
+  /* Inline page-ref pill. Base text follows the theme (readable on the
+     themed --pageref-bg in both light and dark). When colorPageRefs paints
+     a pastel highlight background, it also pins the text to dark inline,
+     since the highlight palette is light in both themes. */
+  .pageref { color: var(--text); cursor: pointer; font-weight: 500; padding: 1px 6px; border-radius: 4px; background: var(--pageref-bg); transition: filter 0.1s; }
+  .pageref:hover { filter: brightness(0.92); text-decoration: underline; }
+  .pageref.unmatched { color: var(--accent); background: transparent; padding: 0 1px; }
 
   /* Thinking indicator */
   #log .thinking { color: var(--muted); font-size: 13px; font-style: italic; display: flex; align-items: baseline; gap: 2px; }
@@ -149,9 +153,9 @@
   #log .thoughts .entry.tool { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--muted); }
   #log .thoughts .entry.text { color: var(--thoughts-text); }
 
-  /* Citations */
-  #log .citations { margin-top: 10px; }
-  #log .citations h4 { margin: 4px 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  /* Citations — shared by chat turns and compare columns. */
+  .citations { margin-top: 10px; }
+  .citations h4 { margin: 4px 0; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
   .citation { display: block; background: var(--cite-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 7px 10px; margin: 5px 0; border-radius: 4px; cursor: pointer; font-size: 12.5px; line-height: 1.4; color: var(--text); transition: background 0.1s; box-shadow: var(--shadow); }
   .citation:hover { background: var(--cite-bg-hover); }
   .citation .idx { font-weight: 700; color: var(--accent); margin-right: 5px; font-variant-numeric: tabular-nums; }
@@ -173,6 +177,76 @@
   #log::-webkit-scrollbar-track { background: transparent; }
   #log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   #log::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Tabs (Chat / Compare) */
+  #tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+  #tabs button { flex: 1; padding: 8px 10px; background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: -1px; }
+  #tabs button:hover { color: var(--text); }
+  #tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* View containers — only the active tab's view is shown. */
+  #chat-view, #compare-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+  #right[data-tab="chat"]    #compare-view { display: none; }
+  #right[data-tab="compare"] #chat-view    { display: none; }
+  #right[data-tab="compare"] #clear        { display: none; }
+
+  /* Compare controls */
+  #compare-controls { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 10px; flex-shrink: 0; }
+  #compare-controls .head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  #compare-controls .head .hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  #compare-pdfs { max-height: 120px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 4px; padding: 6px 8px; background: var(--pane-bg); font-size: 12.5px; }
+  #compare-pdfs label { display: flex; gap: 6px; align-items: center; padding: 2px 0; cursor: pointer; color: var(--text); }
+  #compare-pdfs label:hover { color: var(--accent); }
+  #compare-pdfs .none { color: var(--muted); font-size: 12px; padding: 4px 0; }
+  #compare-q { width: 100%; padding: 8px; min-height: 52px; resize: vertical; font: inherit; font-size: 12.5px; border: 1px solid var(--border); border-radius: 4px; background: var(--pane-bg); color: var(--text); }
+  #compare-q:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  #compare-cfg { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #compare-cfg label { display: flex; gap: 5px; align-items: center; color: var(--muted); font-size: 12px; }
+  #compare-cfg select { font-size: 12px; padding: 4px 6px; background: var(--pane-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+  #compare-actions { display: flex; gap: 8px; align-items: center; }
+  #compare-actions .spacer { flex: 1; }
+  #compare-status { font-size: 11.5px; color: var(--muted); }
+  #compare-go { font-size: 13px; padding: 7px 14px; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 4px; cursor: pointer; font-weight: 600; }
+  #compare-go:hover:not(:disabled) { filter: brightness(1.05); }
+  #compare-go:disabled { opacity: 0.5; cursor: default; }
+
+  /* Compare results — ONE synthesized answer per run; per-paper answers
+     are tucked into a collapsible detail. */
+  #compare-results { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  .compare-run { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  .compare-run > .run-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .compare-run > .run-head .q { font-weight: 600; font-size: 13px; color: var(--text); flex: 1; min-width: 0; }
+  .compare-run > .run-head .run-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .compare-run > .run-head .compare-close { cursor: pointer; color: var(--muted); font-size: 16px; line-height: 14px; padding: 0 2px; }
+  .compare-run > .run-head .compare-close:hover { color: var(--accent); }
+
+  /* Synthesized cross-paper answer (primary content) */
+  .compare-aggregate { padding: 12px; }
+  .compare-aggregate .agg-status { color: var(--muted); font-size: 12.5px; font-style: italic; }
+  .compare-aggregate > .answer { font-size: 13.5px; line-height: 1.55; }
+  .compare-aggregate > .citations { margin-top: 10px; }
+
+  /* Collapsible per-paper answers (same affordance as the chat thoughts trail) */
+  details.compare-individual { border-top: 1px solid var(--border-soft); font-size: 12.5px; }
+  details.compare-individual > summary { cursor: pointer; user-select: none; padding: 8px 12px; list-style: none; display: flex; gap: 6px; align-items: center; color: var(--muted); }
+  details.compare-individual > summary::-webkit-details-marker { display: none; }
+  details.compare-individual > summary::before { content: '▸'; transition: transform 0.15s ease; display: inline-block; }
+  details.compare-individual[open] > summary::before { transform: rotate(90deg); }
+  details.compare-individual > summary:hover { color: var(--text); }
+  details.compare-individual > .body { padding: 0 12px 8px; }
+  .compare-paper { padding: 8px 0; border-top: 1px dashed var(--border-soft); }
+  .compare-paper:first-child { border-top: 0; }
+  .compare-paper .paper-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 5px; }
+  .compare-paper .paper-title { font-weight: 600; font-size: 12px; color: var(--text); word-break: break-all; flex: 1; min-width: 0; }
+  .compare-paper .paper-tag { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .compare-paper .paper-tag .cached { color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 6px; }
+  .compare-paper .answer { font-size: 12px; line-height: 1.5; }
+  .compare-paper .citation { font-size: 11.5px; padding: 5px 7px; margin: 3px 0; }
+  .compare-paper .err { color: #c0392b; font-size: 12px; }
+  .pending { color: var(--muted); font-size: 12px; font-style: italic; }
+  .citation .src { color: var(--muted); font-weight: 400; font-size: 10.5px; margin-right: 6px; }
+  #compare-results::-webkit-scrollbar { width: 8px; height: 8px; }
+  #compare-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -186,7 +260,7 @@
 
 <div id="resizer" title="Drag to resize"></div>
 
-<div id="right">
+<div id="right" data-tab="chat">
   <header id="brand">
     <img src="/static/icon.png" alt="">
     <h1>sift</h1>
@@ -196,19 +270,47 @@
     <input type="file" id="upload" accept="application/pdf">
     <button id="clear" title="Clear chat history for this PDF" disabled>↩ clear</button>
   </div>
-  <div id="log"><div class="placeholder">Upload or pick a PDF, then ask a question.</div></div>
-  <textarea id="q" placeholder="Ask a question about the PDF… (Enter to send, Shift+Enter for newline)"></textarea>
-  <div id="ask-row">
-    <label style="font-size:12px;color:var(--muted)">model
-      <select id="model"></select>
-    </label>
-    <label style="font-size:12px;color:var(--muted)">mode
-      <select id="mode"></select>
-    </label>
-    <label style="font-size:12px;color:var(--muted)" title="Which CLI binary the agent spawns. `claude` = official Claude Code (Anthropic). `openclaude` = drop-in alternative that can route to OpenRouter / OpenAI / Gemini / etc. Configure the underlying provider in the chosen CLI itself.">backend
-      <select id="backend"></select>
-    </label>
-    <button id="send" disabled>Ask</button>
+  <div id="tabs">
+    <button id="tab-chat" class="active" type="button">Chat</button>
+    <button id="tab-compare" type="button">Compare</button>
+  </div>
+
+  <!-- CHAT TAB: single-PDF Q&A -->
+  <div id="chat-view">
+    <div id="log"><div class="placeholder">Upload or pick a PDF, then ask a question.</div></div>
+    <textarea id="q" placeholder="Ask a question about the PDF… (Enter to send, Shift+Enter for newline)"></textarea>
+    <div id="ask-row">
+      <label style="font-size:12px;color:var(--muted)">model
+        <select id="model"></select>
+      </label>
+      <label style="font-size:12px;color:var(--muted)">mode
+        <select id="mode"></select>
+      </label>
+      <label style="font-size:12px;color:var(--muted)" title="Which CLI binary the agent spawns. `claude` = official Claude Code (Anthropic). `openclaude` = drop-in alternative that can route to OpenRouter / OpenAI / Gemini / etc. Configure the underlying provider in the chosen CLI itself.">backend
+        <select id="backend"></select>
+      </label>
+      <button id="send" disabled>Ask</button>
+    </div>
+  </div>
+
+  <!-- COMPARE TAB: one question across many PDFs, grouped per paper -->
+  <div id="compare-view">
+    <div id="compare-controls">
+      <div class="head">Compare across PDFs <span class="hint">— same question sent to every selected PDF; answers cached server-side</span></div>
+      <div id="compare-pdfs"></div>
+      <textarea id="compare-q" placeholder="Question to ask each selected PDF…"></textarea>
+      <div id="compare-cfg">
+        <label>model <select id="compare-model"></select></label>
+        <label>mode <select id="compare-mode"></select></label>
+        <label>backend <select id="compare-backend"></select></label>
+      </div>
+      <div id="compare-actions">
+        <span id="compare-status"></span>
+        <span class="spacer"></span>
+        <button id="compare-go" type="button">Ask selected</button>
+      </div>
+    </div>
+    <div id="compare-results"><div class="placeholder">Pick PDFs and a question, then “Ask selected”. You get one synthesized answer across all of them.</div></div>
   </div>
 </div>
 
@@ -225,6 +327,29 @@ const modeSelect = document.getElementById('mode');
 const backendSelect = document.getElementById('backend');
 const clearBtn = document.getElementById('clear');
 const themeToggle = document.getElementById('theme-toggle');
+// Tabs + compare view
+const rightPane = document.getElementById('right');
+const tabChatBtn = document.getElementById('tab-chat');
+const tabCompareBtn = document.getElementById('tab-compare');
+const comparePdfs = document.getElementById('compare-pdfs');
+const compareQ = document.getElementById('compare-q');
+const compareGo = document.getElementById('compare-go');
+const compareStatus = document.getElementById('compare-status');
+const compareResults = document.getElementById('compare-results');
+const compareModelSelect = document.getElementById('compare-model');
+const compareModeSelect = document.getElementById('compare-mode');
+const compareBackendSelect = document.getElementById('compare-backend');
+
+// --- tab switching ---
+function setTab(tab) {
+  rightPane.dataset.tab = tab;
+  tabChatBtn.classList.toggle('active', tab === 'chat');
+  tabCompareBtn.classList.toggle('active', tab === 'compare');
+  localStorage.setItem('sift.tab', tab);
+  if (tab === 'compare') refreshComparePdfs();
+}
+tabChatBtn.addEventListener('click', () => setTab('chat'));
+tabCompareBtn.addEventListener('click', () => setTab('compare'));
 
 // --- theme handling ---
 function applyTheme(t) {
@@ -335,6 +460,24 @@ function modelCfgFor(backendName) {
     const cfg = modelCfgFor(backendSelect.value);
     if (cfg) populate(modelSelect, cfg, 'sift.model');
   });
+
+  // The Compare tab has its own model/mode/backend selectors so a
+  // comparison can use a different model than the chat tab. They share
+  // the same localStorage keys so defaults line up across reloads.
+  populate(compareModeSelect, j.modes, 'sift.mode');
+  populate(compareBackendSelect, j.backends || fallback.backends, 'sift.backend');
+  const cmpModelCfg = modelCfgFor(compareBackendSelect.value) || j.models;
+  populate(compareModelSelect, cmpModelCfg, 'sift.model');
+  compareBackendSelect.addEventListener('change', () => {
+    const cfg = modelCfgFor(compareBackendSelect.value);
+    if (cfg) populate(compareModelSelect, cfg, 'sift.model');
+  });
+
+  // Populate the PDF dropdown BEFORE applying the saved tab, so that if
+  // the saved tab is "compare", refreshComparePdfs() (called by setTab)
+  // sees a populated dropdown instead of the empty placeholder option.
+  await refreshList();
+  setTab(localStorage.getItem('sift.tab') || 'chat');
 })();
 
 // --- minimal markdown renderer (bold, italic, code, lists, headings, links) ---
@@ -433,16 +576,21 @@ function colorPageRefs(root, citations) {
       const primary = cites[indices[0] - 1];
       if (primary && primary.found !== false && primary.color) {
         ref.style.backgroundColor = primary.color;
+        ref.style.color = '#1a1a1c';  // dark text on the light pastel, both themes
         ref.classList.remove('unmatched');
       } else {
         ref.classList.add('unmatched');
         ref.style.backgroundColor = '';
+        ref.style.color = '';  // fall back to themed .pageref/.unmatched color
       }
       // Resolve passage indices → page numbers so click navigation works.
       const pages = indices
         .map(i => cites[i - 1] && cites[i - 1].page)
         .filter(p => Number.isFinite(p));
       if (pages.length) ref.dataset.pages = JSON.stringify(pages);
+      // Aggregated answers: remember which PDF this global citation came
+      // from, so a pill click opens that paper (not the active chat PDF).
+      if (primary && primary.file_id) ref.dataset.fileId = primary.file_id;
     } else {
       const pages = JSON.parse(ref.dataset.pages || '[]');
       const p = pages[0];
@@ -452,10 +600,12 @@ function colorPageRefs(root, citations) {
         const c = list[i % list.length];
         idx[p] = i + 1;
         ref.style.backgroundColor = c.color;
+        ref.style.color = '#1a1a1c';  // dark text on the light pastel, both themes
         ref.classList.remove('unmatched');
       } else {
         ref.classList.add('unmatched');
         ref.style.backgroundColor = '';
+        ref.style.color = '';  // fall back to themed .pageref/.unmatched color
       }
     }
   }
@@ -585,6 +735,8 @@ async function refreshList(selected) {
     if (f === selected) o.selected = true;
     select.appendChild(o);
   }
+  // Keep the Compare tab's PDF checklist in step with the dropdown.
+  refreshComparePdfs();
 }
 
 function loadFile(name) {
@@ -593,9 +745,24 @@ function loadFile(name) {
   showHighlighted.checked = false;
   reloadFrame();
   send.disabled = !fileId;
-  // Reset chat panel and rehydrate history for this PDF
-  log.innerHTML = '<div class="placeholder">Loading…</div>';
-  loadHistory();
+  // Reset chat panel and rehydrate history for this PDF — but preserve
+  // any compare results already rendered (they're cross-PDF, not tied to
+  // the currently-selected file). loadHistory does the selective wipe.
+  loadHistory(/*loading=*/true);
+}
+
+// Clear the chat log (per-PDF turns + placeholder). Compare results live
+// in a separate container (#compare-results), so they're untouched here.
+function clearChatTurnsOnly() {
+  log.querySelectorAll('.turn, .placeholder').forEach(n => n.remove());
+}
+
+// Show the chat placeholder, unless there's already an active chat turn.
+function setPlaceholder(text) {
+  log.querySelectorAll('.placeholder').forEach(n => n.remove());
+  if (!text) return;
+  if (log.querySelector('.turn')) return;  // active per-PDF chat — skip
+  log.appendChild(el('div', 'placeholder', text));
 }
 
 function renderPastTurn(t, turnIdx) {
@@ -622,10 +789,17 @@ function buildCitationChip(c, box, turnIdx, index) {
   if (c.color) cite.style.borderLeftColor = c.color;
   if (Number.isInteger(index)) cite.appendChild(el('span', 'idx', '[' + (index + 1) + ']'));
   cite.appendChild(el('span', 'pg', 'p.' + c.page));
-  cite.appendChild(document.createTextNode(c.quote));
-  if (c.found !== false) {
-    cite.addEventListener('click', () => loadTurnPdf(turnIdx, c.page));
+  // Aggregated (cross-paper) citations carry their source file_id: show the
+  // paper name and remember it so a click opens the right PDF.
+  if (c.file_id) {
+    cite.appendChild(el('span', 'src', c.file_id.replace(/\.pdf$/i, '')));
+    cite.dataset.fileId = c.file_id;
   }
+  cite.appendChild(document.createTextNode(c.quote));
+  cite.dataset.page = String(c.page);
+  // Per-PDF chat chips know their turnIdx; compare chips resolve context via
+  // closest() in openCitation(), so we don't bind anything here directly.
+  if (Number.isInteger(turnIdx)) cite.dataset.turnIdx = String(turnIdx);
   box.appendChild(cite);
 }
 
@@ -645,24 +819,56 @@ function loadTurnPdf(turnIdx, page) {
   pdfFrame.src = u;
 }
 
+// Compare-column chip / pill click: open a *specific* PDF (which may not
+// be the currently-loaded one) on the LEFT pane at `page`, highlighted
+// using the citations captured by the named /ask-multi run. The compare
+// results themselves (right pane) are untouched — only the left PDF and
+// the chat tab's current file change.
+function loadComparePdf(fid, page, runId) {
+  if (!fid) return;
+  if (fid !== fileId) {
+    select.value = fid;
+    fileId = fid;
+    hasHighlighted = true;
+    send.disabled = false;
+    // Rehydrate the Chat tab for the newly-selected PDF (lazily; it's
+    // hidden while the Compare tab is active).
+    clearChatTurnsOnly();
+    loadHistory(/*loading=*/false);
+  }
+  showHighlighted.checked = true;
+  hasHighlighted = true;
+  const params = new URLSearchParams();
+  params.set('cmp', runId);
+  params.set('t', Date.now());
+  let u = '/pdf/' + encodeURIComponent(fid) + '?' + params.toString();
+  if (page) u += '#page=' + page;
+  pdfFrame.src = u;
+}
+
 // Total turns currently rendered in the chat for the active PDF — used as
 // the next live turn's index when /ask completes. Reset on file switch.
 let turnCount = 0;
 
-async function loadHistory() {
-  if (!fileId) { clearBtn.disabled = true; turnCount = 0; return; }
+async function loadHistory(loading) {
+  // Wipe the prior PDF's chat turns before rehydrating this one's.
+  clearChatTurnsOnly();
+  if (loading) setPlaceholder('Loading…');
+
+  if (!fileId) { clearBtn.disabled = true; turnCount = 0; setPlaceholder('Upload or pick a PDF, then ask a question.'); return; }
   let turns = [];
   try {
     const r = await fetch('/history/' + encodeURIComponent(fileId));
     if (r.ok) turns = (await r.json()).turns || [];
   } catch {}
+  // Always re-clear in case anything was added between the two awaits
+  clearChatTurnsOnly();
   if (!turns.length) {
-    log.innerHTML = '<div class="placeholder">Ask a question about this PDF.</div>';
+    setPlaceholder('Ask a question about this PDF.');
     clearBtn.disabled = true;
     turnCount = 0;
     return;
   }
-  log.innerHTML = '';
   turns.forEach((t, i) => renderPastTurn(t, i));
   turnCount = turns.length;
   clearBtn.disabled = false;
@@ -676,7 +882,8 @@ clearBtn.addEventListener('click', async () => {
   if (!fileId) return;
   if (!confirm('Clear chat history for this PDF?')) return;
   await fetch('/clear/' + encodeURIComponent(fileId), { method: 'POST' });
-  log.innerHTML = '<div class="placeholder">Cleared. Ask a new question.</div>';
+  clearChatTurnsOnly();
+  setPlaceholder('Cleared. Ask a new question.');
   clearBtn.disabled = true;
   // Reset turn counter so the next live turn maps to CHATS[0] server-side
   // — without this, ?turn=N requests look up an index that no longer exists.
@@ -694,6 +901,7 @@ upload.addEventListener('change', async () => {
   const r = await fetch('/upload', { method: 'POST', body: fd });
   const j = await r.json();
   await refreshList(j.file_id);
+  refreshComparePdfs();   // keep the compare-tab PDF list in sync
   loadFile(j.file_id);
 });
 
@@ -703,18 +911,49 @@ select.addEventListener('change', () => {
 
 showHighlighted.addEventListener('change', () => reloadFrame());
 
+// Delegated click handler for the chat log: routes citation chips and
+// inline pageref pills to openCitation(). (Compare results live in their
+// own container with a separate handler — see the Compare section.)
 log.addEventListener('click', e => {
+  const chip = e.target.closest('.citation');
+  if (chip && !chip.classList.contains('missing')) return openCitation(chip);
   const ref = e.target.closest('.pageref');
-  if (!ref || !fileId) return;
-  const pages = JSON.parse(ref.dataset.pages || '[]');
-  if (!pages.length) return;
-  // Walk up to the .turn element to find which turn this pill belongs to,
-  // so the iframe loads THAT turn's highlights, not the most recent.
-  const turnDom = ref.closest('.turn');
+  if (ref && !ref.classList.contains('unmatched')) return openCitation(ref);
+});
+
+// Open the PDF associated with `node` (a .citation chip or .pageref
+// pill) at its page. Two paths:
+//   1) Inside a .compare-run → swap the LEFT pane to the citation's PDF
+//      and load the compare-run highlights via /pdf/<fid>?cmp=<runId>.
+//   2) Otherwise (per-PDF chat) → use existing turn-based highlights.
+function openCitation(node) {
+  // Page comes from either .dataset.pages (for pills) or .dataset.page
+  // (for chips); both are populated when the node is built.
+  let page = 0;
+  if (node.dataset.pages) {
+    const ps = JSON.parse(node.dataset.pages);
+    if (ps && ps.length) page = ps[0];
+  } else if (node.dataset.page) {
+    page = parseInt(node.dataset.page, 10);
+  }
+  // Inside a comparison run: the run_id comes from the .compare-run; the
+  // file_id comes either from the citation node itself (aggregated answer,
+  // where each global citation is tagged) or from the enclosing per-paper
+  // section's data-file-id.
+  const runEl = node.closest('.compare-run');
+  if (runEl) {
+    const rid = runEl.dataset.runId;
+    const owner = node.dataset.fileId ? node : node.closest('[data-file-id]');
+    const fid = node.dataset.fileId || (owner && owner.dataset.fileId);
+    if (fid && rid) return loadComparePdf(fid, page, rid);
+    return;
+  }
+  if (!fileId) return;
+  const turnDom = node.closest('.turn');
   const idxStr = turnDom && turnDom.dataset.turnIdx;
   const turnIdx = idxStr != null && idxStr !== '' ? parseInt(idxStr, 10) : undefined;
-  loadTurnPdf(turnIdx, pages[0]);
-});
+  loadTurnPdf(turnIdx, page);
+}
 
 // Generic Claude-style activity verbs. Never task-specific — we don't expose
 // what the agent is actually doing.
@@ -763,15 +1002,22 @@ function el(tag, cls, text) {
   return e;
 }
 
+// True when the element is scrolled to (or near) its bottom. Used to
+// decide whether streaming updates should keep the view pinned to the
+// bottom. If the user has scrolled UP to read, we leave them there
+// instead of yanking the viewport down on every token.
+function nearBottom(elem, px) {
+  return elem.scrollHeight - elem.scrollTop - elem.clientHeight < (px == null ? 90 : px);
+}
+
 send.addEventListener('click', async () => {
   if (!fileId || !q.value.trim()) return;
   send.disabled = true;
   const question = q.value;
   q.value = '';
 
-  // clear placeholder on first turn
-  const placeholder = log.querySelector('.placeholder');
-  if (placeholder) log.innerHTML = '';
+  // Remove the chat placeholder if present.
+  log.querySelectorAll('.placeholder').forEach(n => n.remove());
 
   const turn = turnEl();
   const liveTurnIdx = turnCount;  // committed when the turn finishes
@@ -847,6 +1093,9 @@ send.addEventListener('click', async () => {
       if (!line) continue;
       let m;
       try { m = JSON.parse(line); } catch { continue; }
+      // Capture stickiness BEFORE this event mutates the DOM, so we only
+      // re-pin to the bottom if the user was already there.
+      const stick = nearBottom(log);
       if (m.type === 'text') {
         if (answer.style.display === 'none') {
           stopThinking();
@@ -918,7 +1167,7 @@ send.addEventListener('click', async () => {
         stopThinking();
         meta.textContent = 'ERROR: ' + m.data;
       }
-      log.scrollTop = log.scrollHeight;
+      if (stick) log.scrollTop = log.scrollHeight;
     }
   }
   send.disabled = false;
@@ -932,7 +1181,296 @@ q.addEventListener('keydown', e => {
   }
 });
 
-refreshList();
+// --- Compare across PDFs (its own tab) ---
+// Results render into #compare-results, grouped BY PAPER into side-by-side
+// columns. State lives entirely in the compare-view DOM, so switching the
+// left PDF or the Chat tab never disturbs a comparison. Each run carries a
+// server-side run_id; clicking a citation opens that paper on the LEFT
+// pane with the run's highlights (see loadComparePdf).
+
+// Rebuild the PDF checkbox list from the current dropdown, preserving any
+// existing checks. Called when the Compare tab opens and after uploads.
+function refreshComparePdfs() {
+  const checked = new Set(
+    Array.from(comparePdfs.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value)
+  );
+  const hadAny = comparePdfs.querySelector('input[type=checkbox]') != null;
+  comparePdfs.innerHTML = '';
+  const opts = Array.from(select.options).filter(o => o.value);
+  if (!opts.length) {
+    comparePdfs.innerHTML = '<div class="none">No PDFs uploaded yet.</div>';
+    return;
+  }
+  for (const o of opts) {
+    const row = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = o.value;
+    // Restore prior checks; on the very first build, pre-tick the loaded PDF.
+    if (checked.has(o.value) || (!hadAny && checked.size === 0 && o.value === fileId)) {
+      cb.checked = true;
+    }
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(o.value));
+    comparePdfs.appendChild(row);
+  }
+}
+
+// Build one collapsed per-paper section (lives inside the "Per-paper
+// answers" disclosure). data-file-id lets a citation click resolve which
+// PDF to open; the run_id comes from the enclosing .compare-run.
+function buildComparePaper(fid) {
+  const sec = el('div', 'compare-paper');
+  sec.dataset.fileId = fid;
+  const head = el('div', 'paper-head');
+  head.appendChild(el('span', 'paper-title', fid));
+  head.appendChild(el('span', 'paper-tag', 'pending…'));
+  sec.appendChild(head);
+  const ans = el('div', 'answer');
+  ans.appendChild(el('div', 'pending', 'waiting…'));
+  sec.appendChild(ans);
+  sec.appendChild(el('div', 'citations'));
+  return sec;
+}
+
+// Restore the empty-state placeholder if no comparison runs remain.
+function restoreComparePlaceholderIfEmpty() {
+  if (!compareResults.querySelector('.compare-run')) {
+    compareResults.innerHTML =
+      '<div class="placeholder">Pick PDFs and a question, then “Ask selected”. You get one synthesized answer across all of them.</div>';
+  }
+}
+
+// Remove a run node and restore the placeholder if it was the last one.
+function removeCompareRun(run) {
+  if (run) run.remove();
+  restoreComparePlaceholderIfEmpty();
+}
+
+compareGo.addEventListener('click', async () => {
+  const fileIds = Array.from(
+    comparePdfs.querySelectorAll('input[type=checkbox]:checked')
+  ).map(c => c.value);
+  const question = compareQ.value.trim();
+  if (!fileIds.length) { compareStatus.textContent = 'pick at least one PDF'; return; }
+  if (!question)       { compareStatus.textContent = 'question required'; return; }
+  const model = compareModelSelect.value;
+  const mode = compareModeSelect.value;
+  const backend = compareBackendSelect.value;
+
+  compareGo.disabled = true;
+  compareStatus.textContent = `running ${fileIds.length}…`;
+  compareResults.querySelectorAll('.placeholder').forEach(n => n.remove());
+
+  // --- run DOM: head, synthesized-answer area, collapsed per-paper area ---
+  const run = el('div', 'compare-run');
+  const head = el('div', 'run-head');
+  head.appendChild(el('div', 'q', question));
+  head.appendChild(el('div', 'run-meta',
+    `${fileIds.length} PDF${fileIds.length === 1 ? '' : 's'} · ${model}/${mode}/${backend}`));
+  const closer = el('span', 'compare-close', '×');
+  closer.title = 'Dismiss this comparison';
+  head.appendChild(closer);
+  run.appendChild(head);
+
+  // Synthesized cross-paper answer — the primary content.
+  const agg = el('div', 'compare-aggregate');
+  const aggStatus = el('div', 'agg-status',
+    `Answering ${fileIds.length} paper${fileIds.length === 1 ? '' : 's'}…`);
+  agg.appendChild(aggStatus);
+  const aggAns = el('div', 'answer');
+  aggAns.style.display = 'none';
+  agg.appendChild(aggAns);
+  const aggCites = el('div', 'citations');
+  agg.appendChild(aggCites);
+  run.appendChild(agg);
+
+  // Per-paper answers, collapsed by default (toggle like the chat thoughts).
+  const details = document.createElement('details');
+  details.className = 'compare-individual';
+  const summary = document.createElement('summary');
+  summary.textContent = `Per-paper answers (${fileIds.length})`;
+  details.appendChild(summary);
+  const detBody = el('div', 'body');
+  details.appendChild(detBody);
+  const papers = {};
+  for (const fid of fileIds) {
+    const sec = buildComparePaper(fid);
+    papers[fid] = sec;
+    detBody.appendChild(sec);
+  }
+  run.appendChild(details);
+
+  compareResults.insertBefore(run, compareResults.firstChild);
+
+  // The × button cancels this run's in-flight stream; the loop treats the
+  // resulting AbortError as a clean stop.
+  const ctrl = new AbortController();
+  run._abort = () => ctrl.abort();
+  const setStatus = (t) => { if (run.isConnected) compareStatus.textContent = t; };
+  const setAgg = (t) => { if (run.isConnected) { aggStatus.style.display = ''; aggStatus.textContent = t; } };
+
+  let r;
+  try {
+    r = await fetch('/ask-multi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_ids: fileIds, question, model, mode, backend }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    compareGo.disabled = false;
+    if (!ctrl.signal.aborted) setStatus('request failed: ' + e);
+    removeCompareRun(run);
+    return;
+  }
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { msg = (await r.json()).detail || msg; } catch {}
+    compareGo.disabled = false;
+    setStatus('error: ' + msg);
+    removeCompareRun(run);
+    return;
+  }
+
+  const answerRaw = {};   // per-paper accumulated text
+  const completed = new Set();
+  let aggRaw = '';        // synthesized answer accumulated text
+  let sawAgg = false;     // did any aggregate_* event arrive?
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const events = buf.split('\n\n');
+      buf = events.pop();
+      for (const evt of events) {
+        const line = evt.replace(/^data: /, '').trim();
+        if (!line) continue;
+        let m;
+        try { m = JSON.parse(line); } catch { continue; }
+
+        if (m.type === 'multi_start') {
+          if (m.data && m.data.run_id) run.dataset.runId = m.data.run_id;
+          continue;
+        }
+        if (m.type === 'multi_done') {
+          // If no PDF produced an answer, the server skips synthesis
+          // entirely — finalize the (otherwise stuck) status line.
+          if (!sawAgg) setAgg('No cross-paper synthesis — no paper produced an answer.');
+          continue;
+        }
+
+        // ---- synthesized cross-paper answer ----
+        if (m.type === 'aggregate_start') {
+          sawAgg = true;
+          aggRaw = '';
+          setAgg('Synthesizing across papers…');
+          continue;
+        }
+        if (m.type === 'aggregate_text') {
+          sawAgg = true;
+          aggRaw += m.data;
+          aggStatus.style.display = 'none';
+          aggAns.style.display = '';
+          aggAns.innerHTML = renderMarkdown(aggRaw);
+          linkifyPageRefs(aggAns);
+          continue;
+        }
+        if (m.type === 'aggregate_done') {
+          sawAgg = true;
+          const cs = m.data.citations || [];
+          aggRaw = m.data.answer || aggRaw || '';
+          aggStatus.style.display = 'none';
+          aggAns.style.display = '';
+          aggAns.innerHTML = renderMarkdown(aggRaw);
+          linkifyPageRefs(aggAns);
+          aggCites.innerHTML = '';
+          cs.forEach((c, i) => buildCitationChip(c, aggCites, undefined, i));
+          colorPageRefs(aggAns, cs);
+          continue;
+        }
+        if (m.type === 'aggregate_error') {
+          // Drop any partially-streamed (and now unciteable) answer so we
+          // don't show "failed" and a half answer at the same time.
+          sawAgg = true;
+          aggRaw = '';
+          aggAns.innerHTML = '';
+          aggAns.style.display = 'none';
+          aggCites.innerHTML = '';
+          setAgg('synthesis failed: ' + (m.data || 'unknown'));
+          continue;
+        }
+
+        // ---- per-paper events (rendered into the collapsed detail) ----
+        const fid = m.file_id;
+        const sec = papers[fid];
+        if (!sec) continue;
+        const tag = sec.querySelector('.paper-tag');
+        const ansEl = sec.querySelector('.answer');
+        const citesEl = sec.querySelector('.citations');
+
+        if (m.type === 'stats') {
+          const k = (m.data.char_count / 1000).toFixed(1);
+          tag.textContent = `${m.data.page_count} pages · ${k}k chars`;
+        } else if (m.type === 'text') {
+          answerRaw[fid] = (answerRaw[fid] || '') + m.data;
+          ansEl.innerHTML = renderMarkdown(answerRaw[fid]);
+          linkifyPageRefs(ansEl);
+        } else if (m.type === 'tool') {
+          answerRaw[fid] = '';
+          ansEl.innerHTML = '<div class="pending">working…</div>';
+        } else if (m.type === 'done') {
+          const cs = m.data.citations || [];
+          answerRaw[fid] = m.data.answer || answerRaw[fid] || '';
+          ansEl.innerHTML = renderMarkdown(answerRaw[fid]);
+          linkifyPageRefs(ansEl);
+          citesEl.innerHTML = '';
+          cs.forEach((c, i) => buildCitationChip(c, citesEl, undefined, i));
+          colorPageRefs(ansEl, cs);
+          const cost = m.data.cost_usd ? ` · $${m.data.cost_usd.toFixed(4)}` : '';
+          tag.textContent = `${cs.length} cite${cs.length === 1 ? '' : 's'}${cost}`;
+          if (m.data.cached) tag.appendChild(el('span', 'cached', 'cached'));
+          completed.add(fid);
+          setAgg(`Answered ${completed.size}/${fileIds.length} paper${fileIds.length === 1 ? '' : 's'}…`);
+          setStatus(`${completed.size}/${fileIds.length} answered`);
+        } else if (m.type === 'error') {
+          ansEl.innerHTML = '';
+          ansEl.appendChild(el('div', 'err', 'ERROR: ' + (m.data || 'unknown')));
+          tag.textContent = 'error';
+          completed.add(fid);
+          setStatus(`${completed.size}/${fileIds.length} answered`);
+        }
+      }
+    }
+  } catch (e) {
+    // Aborted via dismiss, or the stream dropped mid-flight — stop quietly.
+  }
+  compareGo.disabled = false;
+  setStatus(run.isConnected ? 'done' : '');
+});
+
+// Click delegation for compare results: dismiss button, citation chips,
+// and inline pageref pills all route here.
+compareResults.addEventListener('click', e => {
+  const closeBtn = e.target.closest('.compare-close');
+  if (closeBtn) {
+    const run = closeBtn.closest('.compare-run');
+    if (run && run._abort) run._abort();   // cancel its stream if still running
+    removeCompareRun(run);
+    return;
+  }
+  const chip = e.target.closest('.citation');
+  if (chip && !chip.classList.contains('missing')) return openCitation(chip);
+  const ref = e.target.closest('.pageref');
+  if (ref && !ref.classList.contains('unmatched')) return openCitation(ref);
+});
+
+// Initial PDF list load happens inside the /config IIFE (awaited before
+// the saved tab is applied), so no separate refreshList() call is needed here.
 </script>
 </body>
 </html>
