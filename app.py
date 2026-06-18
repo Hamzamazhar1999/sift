@@ -103,6 +103,28 @@ async def upload(file: UploadFile = File(...)):
     return {"file_id": safe}
 
 
+@app.post("/pdfs/clear-all")
+async def clear_all_pdfs():
+    """Delete every PDF in pdfs/ (sources + highlighted derivatives) and
+    their sidecars (.pages.txt / _citations.json), and reset all in-memory
+    state that referenced them. Wipes the whole library — used by the
+    'clear all' button."""
+    removed = 0
+    for p in list(PDF_DIR.glob("*.pdf")) + list(PDF_DIR.glob("*.pages.txt")) \
+            + list(PDF_DIR.glob("*_citations.json")):
+        try:
+            p.unlink()
+            if p.suffix == ".pdf":
+                removed += 1
+        except OSError:
+            pass
+    CHATS.clear()
+    ASK_CACHE.clear()
+    COMPARE_RUNS.clear()
+    AGG_CACHE.clear()
+    return {"ok": True, "removed": removed}
+
+
 _HIGHLIGHTED_SUFFIX = re.compile(r"_highlighted(?:_t\d+(?:_[a-f0-9]+)?)?$")
 
 
@@ -511,3 +533,4 @@ async def ask_multi(body: AskMultiBody):
         yield f"data: {json.dumps({'type': 'multi_done', 'data': {'run_id': run_id}})}\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+

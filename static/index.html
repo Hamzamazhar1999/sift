@@ -99,9 +99,11 @@
   #upload-row input[type="file"] { flex: 1; min-width: 0; color: var(--text-soft); font: inherit; font-size: 12.5px; }
   #upload-row input[type="file"]::file-selector-button { background: var(--pane-bg); color: var(--text); border: 1px solid var(--border); padding: 5px 10px; border-radius: 4px; font: inherit; font-size: 12.5px; cursor: pointer; margin-right: 8px; }
   #upload-row input[type="file"]::file-selector-button:hover { background: var(--bg); }
-  #upload-row #clear { font-size: 12px; padding: 5px 10px; border: 1px solid var(--border); background: var(--pane-bg); border-radius: 4px; cursor: pointer; color: var(--text-soft); }
+  #upload-row #clear, #upload-row #clear-all { font-size: 12px; padding: 5px 10px; border: 1px solid var(--border); background: var(--pane-bg); border-radius: 4px; cursor: pointer; color: var(--text-soft); white-space: nowrap; }
   #upload-row #clear:hover:not(:disabled) { background: var(--cite-bg); color: var(--accent); border-color: var(--accent); }
   #upload-row #clear:disabled { opacity: 0.35; cursor: default; }
+  #upload-row #clear-all:hover { background: #fde8e8; color: #c0392b; border-color: #c0392b; }
+  [data-theme="dark"] #upload-row #clear-all:hover { background: #3a2020; color: #f08080; border-color: #f08080; }
 
   /* Log */
   #log { flex: 1; overflow-y: auto; background: var(--bg); padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px; line-height: 1.5; color: var(--text); }
@@ -130,6 +132,7 @@
   .pageref { color: var(--text); cursor: pointer; font-weight: 500; padding: 1px 6px; border-radius: 4px; background: var(--pageref-bg); transition: filter 0.1s; }
   .pageref:hover { filter: brightness(0.92); text-decoration: underline; }
   .pageref.unmatched { color: var(--accent); background: transparent; padding: 0 1px; }
+  .pageref + .pageref { margin-left: 3px; }  /* gap between split [3][4][5] pills */
 
   /* Thinking indicator */
   #log .thinking { color: var(--muted); font-size: 13px; font-style: italic; display: flex; align-items: baseline; gap: 2px; }
@@ -267,7 +270,8 @@
     <button id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">☾</button>
   </header>
   <div id="upload-row">
-    <input type="file" id="upload" accept="application/pdf">
+    <input type="file" id="upload" accept="application/pdf" multiple>
+    <button id="clear-all" title="Delete ALL PDFs from sift">🗑 clear all</button>
     <button id="clear" title="Clear chat history for this PDF" disabled>↩ clear</button>
   </div>
   <div id="tabs">
@@ -539,12 +543,24 @@ function linkifyPageRefs(root) {
     let last = 0;
     for (const mt of kept) {
       if (mt.start > last) frag.appendChild(document.createTextNode(s.slice(last, mt.start)));
-      const span = document.createElement('span');
-      span.className = 'pageref';
-      span.textContent = mt.text;
-      if (mt.kind === 'num') span.dataset.indices = JSON.stringify(mt.nums);
-      else                   span.dataset.pages   = JSON.stringify(mt.nums);
-      frag.appendChild(span);
+      if (mt.kind === 'num') {
+        // Split a bundled "[3, 4, 5]" into ONE pill per index so each gets
+        // its own colour matching its PDF highlight (a single pill could
+        // only show the first passage's colour, mismatching the others).
+        mt.nums.forEach((n) => {
+          const span = document.createElement('span');
+          span.className = 'pageref';
+          span.textContent = '[' + n + ']';
+          span.dataset.indices = JSON.stringify([n]);
+          frag.appendChild(span);
+        });
+      } else {
+        const span = document.createElement('span');
+        span.className = 'pageref';
+        span.textContent = mt.text;
+        span.dataset.pages = JSON.stringify(mt.nums);
+        frag.appendChild(span);
+      }
       last = mt.end;
     }
     if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
@@ -894,15 +910,39 @@ clearBtn.addEventListener('click', async () => {
 });
 
 upload.addEventListener('change', async () => {
-  const f = upload.files[0];
-  if (!f) return;
-  const fd = new FormData();
-  fd.append('file', f);
-  const r = await fetch('/upload', { method: 'POST', body: fd });
-  const j = await r.json();
-  await refreshList(j.file_id);
-  refreshComparePdfs();   // keep the compare-tab PDF list in sync
-  loadFile(j.file_id);
+  const files = Array.from(upload.files || []);
+  if (!files.length) return;
+  let firstId = null;
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const r = await fetch('/upload', { method: 'POST', body: fd });
+      if (r.ok) { const j = await r.json(); firstId = firstId || j.file_id; }
+    } catch (_) { /* skip this file, keep going */ }
+  }
+  upload.value = '';                 // allow re-selecting the same files later
+  await refreshList(firstId);        // also refreshes the compare checklist
+  if (firstId) loadFile(firstId);    // open the first uploaded PDF
+});
+
+const clearAllBtn = document.getElementById('clear-all');
+clearAllBtn.addEventListener('click', async () => {
+  if (!confirm('Delete ALL PDFs from sift? This removes every uploaded/fetched PDF and all chats. This cannot be undone.')) return;
+  try {
+    await fetch('/pdfs/clear-all', { method: 'POST' });
+  } catch (_) {}
+  fileId = null;
+  hasHighlighted = false;
+  showHighlighted.checked = false;
+  clearChatTurnsOnly();
+  setPlaceholder('Upload or pick a PDF, then ask a question.');
+  // Clear any compare results too (their PDFs are gone).
+  compareResults.innerHTML = '<div class="placeholder">Pick PDFs and a question, then “Ask selected”. You get one synthesized answer across all of them.</div>';
+  clearBtn.disabled = true;
+  send.disabled = true;
+  reloadFrame();
+  await refreshList();   // empties the dropdown + compare checklist
 });
 
 select.addEventListener('change', () => {
@@ -1468,6 +1508,7 @@ compareResults.addEventListener('click', e => {
   const ref = e.target.closest('.pageref');
   if (ref && !ref.classList.contains('unmatched')) return openCitation(ref);
 });
+
 
 // Initial PDF list load happens inside the /config IIFE (awaited before
 // the saved tab is applied), so no separate refreshList() call is needed here.

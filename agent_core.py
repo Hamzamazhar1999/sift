@@ -128,8 +128,15 @@ FORMATTING:
   answer in a code block.
 - Cite inline with "[N]" immediately after each claim, where N is the
   1-indexed position of the supporting entry in `passages`. Cite multiple
-  passages with "[3, 7]". The same passage can be referenced more than
-  once — reuse the same [N] each time it applies.
+  passages for one claim with "[3, 7]". The same passage may be referenced
+  more than once — reuse its [N] each time THAT passage applies.
+- ONE PASSAGE PER DISTINCT SOURCE. If a sentence names several distinct
+  things (e.g. three different tools, datasets, or papers), give each its
+  own passage and its own [N] — do NOT label two different sources with the
+  same number, and do NOT collapse several distinct sources under a single
+  bundled "[3, 4, 5]" unless that one claim is genuinely supported by all of
+  those passages together. A reader should be able to map each [N] to
+  exactly one highlighted region.
 - INLINE REFS ↔ PASSAGES LIST MUST CORRESPOND BIDIRECTIONALLY:
   · Every inline "[N]" must point to an existing entry: `passages[N-1]`
     must exist. Don't write "[5]" unless `passages` has at least 5 items.
