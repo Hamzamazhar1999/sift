@@ -29,3 +29,6 @@ Thumbs.db
 
 *.log
 
+related_work_outputs/
+
+.gitignore
